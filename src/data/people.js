@@ -1,4 +1,5 @@
 import dayjs from 'dayjs';
+import supabase from '../supabaseClient';
 
 // Initial family tree data
 export const initialFamilyData = {
@@ -58,35 +59,79 @@ export const initialFamilyData = {
   ]
 };
 
-// Save data to localStorage
-export const saveFamilyData = (nodes, edges) => {
-  const data = {
-    nodes,
-    edges,
-    lastUpdated: new Date().toISOString()
-  };
-  localStorage.setItem('familyTreeData', JSON.stringify(data));
+// Save data to Supabase (authenticated)
+export const saveFamilyData = async (nodes, edges) => {
+  const { data: { user } } = await supabase.auth.getUser();
+  
+  if (!user) {
+    console.error('User not authenticated');
+    return;
+  }
+  
+  try {
+    const { data, error } = await supabase
+      .from('family_trees')
+      .upsert({
+        user_id: user.id,
+        nodes,
+        edges,
+        updated_at: new Date().toISOString(),
+      }, {
+        onConflict: 'user_id'
+      });
+
+    if (error) throw error;
+    return data;
+  } catch (error) {
+    console.error('Error saving to Supabase:', error);
+  }
 };
 
-// Load data from localStorage
-export const loadFamilyData = () => {
-  const stored = localStorage.getItem('familyTreeData');
-  if (stored) {
-    try {
-      const data = JSON.parse(stored);
-      return {
-        nodes: data.nodes || initialFamilyData.nodes,
-        edges: data.edges || initialFamilyData.edges
-      };
-    } catch (error) {
-      console.error('Error loading family data:', error);
-      return initialFamilyData;
-    }
+// Load data from Supabase (authenticated)
+export const loadFamilyData = async () => {
+  const { data: { user } } = await supabase.auth.getUser();
+  
+  if (!user) {
+    return initialFamilyData;
   }
-  return initialFamilyData;
+  
+  try {
+    const { data, error } = await supabase
+      .from('family_trees')
+      .select('*')
+      .eq('user_id', user.id)
+      .single();
+
+    if (error) {
+      if (error.code === 'PGRST116') {
+        // No data found, return initial data
+        return initialFamilyData;
+      }
+      throw error;
+    }
+
+    return {
+      nodes: data.nodes || initialFamilyData.nodes,
+      edges: data.edges || initialFamilyData.edges,
+    };
+  } catch (error) {
+    console.error('Error loading from Supabase:', error);
+    return initialFamilyData;
+  }
 };
 
 // Clear all data (reset to initial)
-export const clearFamilyData = () => {
-  localStorage.removeItem('familyTreeData');
+export const clearFamilyData = async () => {
+  const { data: { user } } = await supabase.auth.getUser();
+  
+  if (!user) return;
+  
+  try {
+    await supabase
+      .from('family_trees')
+      .delete()
+      .eq('user_id', user.id);
+  } catch (error) {
+    console.error('Error clearing data:', error);
+  }
 };
