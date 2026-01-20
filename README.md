@@ -1,4 +1,4 @@
-# 🌳 Family Tree App
+# Family Tree App
 
 An interactive family tree application built with React, ReactFlow, and Supabase.
 
@@ -92,19 +92,6 @@ npm run dev
 ```
 
 Open [http://localhost:5173](http://localhost:5173) in your browser.
-
-## Deployment
-
-### Vercel (Recommended)
-
-1. Push your code to GitHub
-2. Go to [vercel.com](https://vercel.com) and import your repository
-3. Add environment variables in Vercel settings:
-   - `VITE_SUPABASE_URL`
-   - `VITE_SUPABASE_ANON_KEY`
-4. Deploy!
-
-Your app will be live at `https://your-app.vercel.app`
 
 ## Project Structure
 
