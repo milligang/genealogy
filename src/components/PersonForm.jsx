@@ -21,6 +21,7 @@ import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
 import { loadFamilyData } from '../data/people';
+import optimizeImage from '../utils/imageOptimization';
 
 export const PersonForm = ({ open, onClose, onSave }) => {
   const [formData, setFormData] = useState({
@@ -48,14 +49,15 @@ export const PersonForm = ({ open, onClose, onSave }) => {
     }
   }, [open]);
 
-  const handlePhotoUpload = (e) => {
+  const handlePhotoUpload = async (e) => {
     const file = e.target.files[0];
     if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setFormData({ ...formData, photo: reader.result });
-      };
-      reader.readAsDataURL(file);
+      try {
+        const optimizedImage = await optimizeImage(file);
+        setFormData({ ...formData, photo: optimizedImage });
+      } catch (error) {
+        console.error('Error optimizing image:', error);
+      }
     }
   };
 
@@ -197,8 +199,12 @@ export const PersonForm = ({ open, onClose, onSave }) => {
                 onChange={(e) => setFormData({ ...formData, gender: e.target.value })}
                 label="Gender"
               >
+                <MenuItem value="">
+                  <em>Prefer not to say</em>
+                </MenuItem>
                 <MenuItem value="male">Male</MenuItem>
                 <MenuItem value="female">Female</MenuItem>
+                <MenuItem value="other">Other</MenuItem>
               </Select>
             </FormControl>
             

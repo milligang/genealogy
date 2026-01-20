@@ -19,6 +19,7 @@ import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import dayjs from 'dayjs';
 import { ConnectionsTab } from './ConnectionsTab';
 import { getPersonDisplayName, getPersonInitials } from '../utils/appHelpers';
+import optimizeImage from '../utils/imageOptimization';
 
 export const EditPanel = ({
   selectedNode,
@@ -31,17 +32,18 @@ export const EditPanel = ({
   edges,
   onUpdateConnections,
 }) => {
-  const handlePhotoUpload = (e) => {
+  const handlePhotoUpload = async (e) => {
     const file = e.target.files[0];
     if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
+      try {
+        const optimizedImage = await optimizeImage(file);
         onUpdate({
           ...selectedNode,
-          data: { ...selectedNode.data, photo: reader.result }
+          data: { ...selectedNode.data, photo: optimizedImage }
         });
-      };
-      reader.readAsDataURL(file);
+      } catch (error) {
+        console.error('Error optimizing image:', error);
+      }
     }
   };
 
@@ -168,8 +170,12 @@ export const EditPanel = ({
                 }}
                 label="Gender"
               >
+                <MenuItem value="">
+                  <em>Prefer not to say</em>
+                </MenuItem>
                 <MenuItem value="male">Male</MenuItem>
                 <MenuItem value="female">Female</MenuItem>
+                <MenuItem value="other">Other</MenuItem>
               </Select>
             </FormControl>
             
