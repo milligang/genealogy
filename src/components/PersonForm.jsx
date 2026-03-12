@@ -17,7 +17,7 @@ import {
   Chip,
 } from '@mui/material';
 import { Close, CameraAlt } from '@mui/icons-material';
-import { DatePicker } from '@mui/x-date-pickers/DatePicker';
+import { FlexibleDatePicker } from '../utils/datePicker';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
 import { loadFamilyData } from '../data/people';
@@ -45,7 +45,7 @@ export const PersonForm = ({ open, onClose, onSave }) => {
   useEffect(() => {
     if (open) {
       const familyData = loadFamilyData();
-      setAvailableNodes(familyData.nodes);
+      setAvailableNodes(familyData?.nodes || []);
     }
   }, [open]);
 
@@ -107,7 +107,7 @@ export const PersonForm = ({ open, onClose, onSave }) => {
 
   const getAvailablePeople = () => {
     const connectedIds = connections.map(c => c.personId);
-    return availableNodes.filter(n => !connectedIds.includes(n.id));
+    return (availableNodes || []).filter(n => !connectedIds.includes(n.id));
   };
 
   const getRelationChipColor = (type) => {
@@ -205,18 +205,16 @@ export const PersonForm = ({ open, onClose, onSave }) => {
               </Select>
             </FormControl>
             
-            <Box display="flex" gap={2}>
-              <DatePicker
+            <Box display="flex" flexDirection="column" gap={2}>
+              <FlexibleDatePicker
                 label="Birth Date"
                 value={formData.birthDate}
                 onChange={(date) => setFormData({ ...formData, birthDate: date })}
-                slotProps={{ textField: { fullWidth: true } }}
               />
-              <DatePicker
+              <FlexibleDatePicker
                 label="Death Date (Optional)"
                 value={formData.deathDate}
                 onChange={(date) => setFormData({ ...formData, deathDate: date })}
-                slotProps={{ textField: { fullWidth: true } }}
               />
             </Box>
             
