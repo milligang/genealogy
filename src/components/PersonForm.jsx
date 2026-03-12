@@ -199,12 +199,9 @@ export const PersonForm = ({ open, onClose, onSave }) => {
                 onChange={(e) => setFormData({ ...formData, gender: e.target.value })}
                 label="Gender"
               >
-                <MenuItem value="">
-                  <em>Prefer not to say</em>
-                </MenuItem>
                 <MenuItem value="male">Male</MenuItem>
                 <MenuItem value="female">Female</MenuItem>
-                <MenuItem value="other">Other</MenuItem>
+                <MenuItem value="other">Prefer not to say</MenuItem>
               </Select>
             </FormControl>
             

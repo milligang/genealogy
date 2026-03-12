@@ -118,5 +118,10 @@ export const darkColors = {
       light: '#f9a8d4',
       border: '#ec4899',
     },
+    other: {
+      primary: '#4ade80',
+      light: '#86efac',
+      border: '#22c55e',
+    },
   },
 };

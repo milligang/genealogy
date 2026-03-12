@@ -13,13 +13,15 @@ import {
   MenuItem,
   FormControl,
   InputLabel,
+  useTheme
 } from '@mui/material';
 import { Close, CameraAlt } from '@mui/icons-material';
-import { DatePicker } from '@mui/x-date-pickers/DatePicker';
-import dayjs from 'dayjs';
 import { ConnectionsTab } from './ConnectionsTab';
 import { getPersonDisplayName, getPersonInitials } from '../utils/appHelpers';
 import optimizeImage from '../utils/imageOptimization';
+import { FlexibleDatePicker } from '../utils/datePicker';
+import { vintageColors } from '../theme/vintageTheme';
+import { darkColors } from '../theme/darkTheme';
 
 export const EditPanel = ({
   selectedNode,
@@ -46,6 +48,12 @@ export const EditPanel = ({
       }
     }
   };
+
+  const theme = useTheme();
+  const colors = theme.palette.mode === 'dark' ? darkColors : vintageColors;
+  const genderColors = selectedNode.data.gender
+    ? colors.gender[selectedNode.data.gender.toLowerCase()] || colors.gender.other
+    : colors.gender.other;
 
   return (
     <Paper 
@@ -85,7 +93,7 @@ export const EditPanel = ({
                 sx={{ 
                   width: 100, 
                   height: 100,
-                  bgcolor: 'primary.main',
+                  bgcolor: selectedNode.data.photo ? 'primary.main' : genderColors.primary,
                   fontSize: '2.5rem',
                   fontWeight: 600
                 }}
@@ -170,37 +178,28 @@ export const EditPanel = ({
                 }}
                 label="Gender"
               >
-                <MenuItem value="">
-                  <em>Prefer not to say</em>
-                </MenuItem>
                 <MenuItem value="male">Male</MenuItem>
                 <MenuItem value="female">Female</MenuItem>
-                <MenuItem value="other">Other</MenuItem>
+                <MenuItem value="other">Prefer not to say</MenuItem>
               </Select>
             </FormControl>
-            
-            <Box display="flex" gap={2}>
-              <DatePicker
+
+            <Box display="flex" flexDirection="column" gap={2}>
+              <FlexibleDatePicker
                 label="Birth Date"
-                value={selectedNode.data.birthDate ? dayjs(selectedNode.data.birthDate) : null}
-                onChange={(date) => {
-                  onUpdate({
-                    ...selectedNode,
-                    data: { ...selectedNode.data, birthDate: date ? date.toISOString() : null }
-                  });
-                }}
-                slotProps={{ textField: { fullWidth: true } }}
+                value={selectedNode.data.birthDate}
+                onChange={(date) => onUpdate({
+                  ...selectedNode,
+                  data: { ...selectedNode.data, birthDate: date }
+                })}
               />
-              <DatePicker
+              <FlexibleDatePicker
                 label="Death Date"
-                value={selectedNode.data.deathDate ? dayjs(selectedNode.data.deathDate) : null}
-                onChange={(date) => {
-                  onUpdate({
-                    ...selectedNode,
-                    data: { ...selectedNode.data, deathDate: date ? date.toISOString() : null }
-                  });
-                }}
-                slotProps={{ textField: { fullWidth: true } }}
+                value={selectedNode.data.deathDate}
+                onChange={(date) => onUpdate({
+                  ...selectedNode,
+                  data: { ...selectedNode.data, deathDate: date }
+                })}
               />
             </Box>
             

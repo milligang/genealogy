@@ -11,13 +11,16 @@ export const PersonNode = ({ data, selected }) => {
   
   const getAge = () => {
     if (!data.birthDate) return '';
-    const birth = dayjs(data.birthDate);
-    const end = data.deathDate ? dayjs(data.deathDate) : dayjs();
-    return end.diff(birth, 'year');
+    const birthYear = typeof data.birthDate === 'object' ? data.birthDate.year : dayjs(data.birthDate).year();
+    const endYear = data.deathDate
+      ? (typeof data.deathDate === 'object' ? data.deathDate.year : dayjs(data.deathDate).year())
+      : dayjs().year();
+    return endYear - birthYear;
   };
 
   const formatDate = (date) => {
-    if (!date) return '';
+    if (!date) return '??';
+    if (typeof date === 'object' && date.year) return String(date.year);
     return dayjs(date).format('YYYY');
   };
 
@@ -130,8 +133,10 @@ export const PersonNode = ({ data, selected }) => {
       <Box display="flex" alignItems="center" gap={0.5}>
         <CalendarToday sx={{ fontSize: 14, color: 'text.secondary' }} />
         <Typography variant="caption" color="text.secondary">
-          {theme.palette.mode === 'light' && data.deathDate ? 'b. ' : ''}{formatDate(data.birthDate)}
-          {data.deathDate ? ` - ${theme.palette.mode === 'light' ? 'd. ' : ''}${formatDate(data.deathDate)}` : ' - Present'}
+          {formatDate(data.birthDate)}
+          {data.deathDate
+            ? ` - ${formatDate(data.deathDate)}`
+            : ' - Present'}
           {getAge() && ` (${getAge()} yrs)`}
         </Typography>
       </Box>

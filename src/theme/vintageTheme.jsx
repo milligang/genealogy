@@ -126,5 +126,10 @@ export const vintageColors = {
       light: '#e6bccf',
       border: '#c57d9a',
     },
+    other: {
+      primary: '#7db87d',
+      light: '#a8cfa8',
+      border: '#5a9e5a',
+    },
   },
 };
