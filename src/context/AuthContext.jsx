@@ -17,29 +17,37 @@ export const AuthProvider = ({ children }) => {
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    // Check active sessions and sets the user
+    let mounted = true;
+
+    // Fetch session once
     supabase.auth.getSession()
       .then(({ data: { session }, error }) => {
-        if (error) {
-          setError(error);
-          console.error('Session error:', error);
+        if (mounted) {
+          if (error) {
+            console.error('Session error:', error);
+            setError(error);
+          }
+          setUser(session?.user ?? null);
+          setLoading(false);
         }
-        setUser(session?.user ?? null);
-        setLoading(false);
       })
-      .catch((err) => {
-        setError(err);
-        console.error('Session catch error:', err);
-        setLoading(false);
+      .catch(err => {
+        if (mounted) {
+          console.error('Session catch error:', err);
+          setError(err);
+          setLoading(false);
+        }
       });
 
-    // Listen for changes on auth state (sign in, sign out, etc.)
+    // Subscribe to auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user ?? null);
-      setLoading(false);
+      if (mounted) setUser(session?.user ?? null);
     });
 
-    return () => subscription.unsubscribe();
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
+    };
   }, []);
 
   const signOut = async () => {
@@ -50,15 +58,8 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  const value = {
-    user,
-    loading,
-    error,
-    signOut,
-  };
-
   return (
-    <AuthContext.Provider value={value}>
+    <AuthContext.Provider value={{ user, loading, error, signOut }}>
       {children}
     </AuthContext.Provider>
   );

@@ -30,13 +30,17 @@ const LoadingFallback = () => (
 );
 
 function App() {
-  const [currentTheme, setCurrentTheme] = useState(THEMES.VINTAGE);
+  const [currentTheme, setCurrentTheme] = useState(() => 
+    localStorage.getItem('theme') || THEMES.VINTAGE
+  );
   const themeConfig = getThemeConfig(currentTheme);
 
   const toggleTheme = () => {
-    setCurrentTheme(current => 
-      current === THEMES.VINTAGE ? THEMES.DARK : THEMES.VINTAGE
-    );
+    setCurrentTheme(current => {
+      const next = current === THEMES.VINTAGE ? THEMES.DARK : THEMES.VINTAGE;
+      localStorage.setItem('theme', next);
+      return next;
+    });
   };
 
   return (
