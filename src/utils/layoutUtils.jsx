@@ -51,7 +51,6 @@ export const getLayoutedElements = (nodes, edges) => {
   return { nodes: layoutedNodes, edges };
 };
 
-// Alternative: Left-to-right layout (uncomment to use)
 export const getLayoutedElementsLR = (nodes, edges) => {
   const dagreGraph = new dagre.graphlib.Graph();
   dagreGraph.setDefaultEdgeLabel(() => ({}));

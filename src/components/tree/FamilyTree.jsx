@@ -16,6 +16,7 @@ import { EditPanel } from '../editing/EditPanel';
 import { Sidebar } from '../layout/Sidebar';
 import { SpouseEdge } from '../edges/SpouseEdge';
 import { SpouseConnectionLine } from '../edges/SpouseConnection';
+import { ParentChildConnectionLine } from '../edges/ParentChildConnection';
 import { ComingSoonDialog } from '../dialogs/ComingSoonDialog';
 import { FeedbackDialog } from '../dialogs/FeedbackDialog';
 
@@ -31,7 +32,6 @@ import { initPlusUtil, handleAddPerson } from '../../utils/handleAddPerson';
 import { createEdgesFromConnections, createNodeFromFormData } from '../../utils/appHelpers';
 import { useModalBlur } from '../../hooks/useModalBlur';
 
-// Defined outside component to satisfy the React Flow nodeTypes stability requirement
 const nodeTypes = { personNode: PersonNode };
 const edgeTypes = { spouse: SpouseEdge };
 
@@ -44,6 +44,7 @@ export const FamilyTree = ({ currentTheme, onThemeToggle }) => {
   const [selectedNode, setSelectedNode] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
+  const [isDraggingSpouse, setIsDraggingSpouse] = useState(false);
 
   const [addPersonState, setAddPersonState] = useState({
     open: false,
@@ -54,28 +55,22 @@ export const FamilyTree = ({ currentTheme, onThemeToggle }) => {
   const [comingSoonOpen, setComingSoonOpen] = useState(false);
   const [feedbackOpen, setFeedbackOpen] = useState(false);
 
-  // Stable ref so node callbacks always call the latest handler
   const handleAddPersonRef = useRef(null);
 
-  // Initialize plus-button util
   useEffect(() => {
     initPlusUtil((open, payload) => setAddPersonState({ open, ...payload }));
   }, []);
 
-  // Node click handler — looks up the live node by id so it's never stale
   const handleNodeClick = useCallback((nodeId) => {
     setNodes((currentNodes) => {
       const live = currentNodes.find((n) => n.id === nodeId);
       if (live) {
-        // Blur before "opening" the edit panel so aria-hidden on #root
-        // doesn't trap the still-focused React Flow node
         openModal(() => setSelectedNode(live));
       }
       return currentNodes;
     });
   }, [openModal]);
 
-  // Attach stable callbacks to a node's data
   const attachNodeCallbacks = useCallback(
     (node) => ({
       ...node,
@@ -96,7 +91,6 @@ export const FamilyTree = ({ currentTheme, onThemeToggle }) => {
     setNodes((nds) => nds.map(attachNodeCallbacks));
   }, [attachNodeCallbacks]);
 
-  // Load saved tree or initial tree
   useEffect(() => {
     const loadData = async () => {
       try {
@@ -122,7 +116,6 @@ export const FamilyTree = ({ currentTheme, onThemeToggle }) => {
     loadData();
   }, []);
 
-  // Save nodes & edges whenever they change (after initial load)
   useEffect(() => {
     if (!isLoading && hasLoadedOnce) {
       try {
@@ -133,7 +126,6 @@ export const FamilyTree = ({ currentTheme, onThemeToggle }) => {
     }
   }, [nodes, edges, isLoading, hasLoadedOnce]);
 
-  // Add person handler
   const handleAddPersonLocal = useCallback(
     ({ formData, connections = [] }) => {
       const baseNode = createNodeFromFormData(formData);
@@ -161,13 +153,63 @@ export const FamilyTree = ({ currentTheme, onThemeToggle }) => {
     setSelectedNode(null);
   };
 
-  // Derive edge type from which handle was dragged — no toggle needed
+  // Set spouse drag state based on which handle the drag originated from
+  const onConnectStart = useCallback((_, { handleId }) => {
+    setIsDraggingSpouse(handleId?.startsWith('spouse') ?? false);
+  }, []);
+
+  const onConnectEnd = useCallback(() => {
+    setIsDraggingSpouse(false);
+  }, []);
+
+  // All nodes are valid targets — edge type is determined solely by the source handle.
+  // Only block self-connections.
+  const isValidConnection = useCallback((connection) => {
+    return connection.source !== connection.target;
+  }, []);
+
   const onConnect = useCallback(
     (params) => {
       const isSpouse = params.sourceHandle?.startsWith('spouse');
-      const edgeType = isSpouse ? 'spouse' : 'parentChild';
-      const edgeConfig = themeConfig.edgeStyles[edgeType];
-      setEdges((eds) => addEdge({ ...params, ...edgeConfig }, eds));
+      const isParent = params.sourceHandle === 'parent-source';
+
+      let edgeConfig, dataType, finalParams;
+
+      if (isSpouse) {
+        // spouse-left/right → connect to the opposite spouse handle on target
+        edgeConfig = themeConfig.edgeStyles.spouse;
+        dataType = 'spouse';
+        const targetHandle = params.sourceHandle === 'spouse-left' ? 'spouse-right' : 'spouse-left';
+        finalParams = { ...params, targetHandle };
+      } else if (isParent) {
+        // top (parent-source)
+        // source node is the child, target node is the parent.
+        // Edge flows parent→child so flip source/target, connect bottom→top.
+        edgeConfig = themeConfig.edgeStyles.parentChild;
+        dataType = 'parent-child';
+        finalParams = {
+          ...params,
+          source: params.target,
+          target: params.source,
+          sourceHandle: 'child-source',
+          targetHandle: 'parent-source',
+        };
+      } else {
+        // bottom (child-source)
+        // source node is the parent, target node is the child.
+        edgeConfig = themeConfig.edgeStyles.parentChild;
+        dataType = 'parent-child';
+        finalParams = {
+          ...params,
+          sourceHandle: 'child-source',
+          targetHandle: 'parent-source',
+        };
+      }
+
+      setEdges((eds) =>
+        addEdge({ ...finalParams, ...edgeConfig, data: { type: dataType } }, eds)
+      );
+      setIsDraggingSpouse(false);
     },
     [setEdges, themeConfig.edgeStyles]
   );
@@ -222,10 +264,16 @@ export const FamilyTree = ({ currentTheme, onThemeToggle }) => {
           onNodesChange={onNodesChange}
           onEdgesChange={onEdgesChange}
           onConnect={onConnect}
+          onConnectStart={onConnectStart}
+          onConnectEnd={onConnectEnd}
+          isValidConnection={isValidConnection}
           nodeTypes={nodeTypes}
           edgeTypes={edgeTypes}
-          connectionLineComponent={SpouseConnectionLine}
+          connectionLineComponent={
+            isDraggingSpouse ? SpouseConnectionLine : ParentChildConnectionLine
+          }
           deleteKeyCode={null}
+          connectionMode="loose"
           fitView
         >
           <Controls />

@@ -4,7 +4,6 @@ import { Handle, Position } from 'reactflow';
 import { vintageColors } from '../../theme/vintageTheme';
 import { darkColors } from '../../theme/darkTheme';
 import { nodeStyles } from '../../theme/sharedStyles';
-import { PlusButtons } from './PlusButtons';
 import { PersonNodeAvatar } from './PersonAvatar';
 import { PersonNodeDates } from './PersonDates';
 
@@ -22,7 +21,6 @@ export const PersonNode = ({ data, selected }) => {
     ? colors.gender[data.gender.toLowerCase()] || colors.gender.other
     : colors.gender.other;
 
-  // Pull handle colors directly from theme color definitions
   const parentChildColor = colors.nodeHandle;
   const spouseColor = colors.edgeSpouse;
 
@@ -31,7 +29,6 @@ export const PersonNode = ({ data, selected }) => {
     border: '2px solid',
     borderColor: selected ? genderColors.border : genderColors.primary,
     backgroundColor: theme.palette.background.paper,
-    // Selected state: use theme shadow style
     ...(selected && {
       boxShadow: theme.palette.mode === 'dark'
         ? nodeStyles.selected.dark.boxShadow
@@ -49,25 +46,23 @@ export const PersonNode = ({ data, selected }) => {
     if (data.onClick) data.onClick({ ...data, nodeId: data.id });
   };
 
-  // Round handles for parent/child
-  const handleStyle = (color) => ({
-    background: color,
-    width: 10,
-    height: 10,
-    border: `2px solid ${color}`,
+  const parentHandleStyle = {
+    background: parentChildColor,
+    width: 18,
+    height: 18,
+    border: `2px solid ${parentChildColor}`,
     borderRadius: '50%',
-  });
+  };
 
-  // Diamond handles for spouse — visually distinct from parent/child
   const spouseHandleStyle = {
     background: spouseColor,
-    width: 10,
-    height: 10,
+    width: 18,
+    height: 18,
     border: `2px solid ${spouseColor}`,
     borderRadius: 0,
     transform: 'rotate(45deg)',
     top: '50%',
-    marginTop: -5,
+    marginTop: -9,
   };
 
   return (
@@ -76,39 +71,11 @@ export const PersonNode = ({ data, selected }) => {
       sx={{ ...nodeBaseStyles, cursor: data.onClick ? 'pointer' : 'default' }}
       onClick={handleNodeClick}
     >
-      {/* Parent/child handles — top and bottom, round */}
-      <Handle
-        id="parent-target"
-        type="target"
-        position={Position.Top}
-        style={handleStyle(parentChildColor)}
-      />
-      <Handle
-        id="child-source"
-        type="source"
-        position={Position.Bottom}
-        style={handleStyle(parentChildColor)}
-      />
 
-      {/* Spouse handles — left and right, diamond */}
-      <Handle
-        id="spouse-left"
-        type="source"
-        position={Position.Left}
-        style={spouseHandleStyle}
-      />
-      <Handle
-        id="spouse-right"
-        type="source"
-        position={Position.Right}
-        style={spouseHandleStyle}
-      />
-
-      <PlusButtons
-        nodeId={data.id}
-        addPersonCallback={data.addPersonCallback}
-        theme={theme}
-      />
+      <Handle id="parent-source" type="source" position={Position.Top}    style={parentHandleStyle} />
+      <Handle id="child-source"  type="source" position={Position.Bottom} style={parentHandleStyle} />
+      <Handle id="spouse-left"   type="source" position={Position.Left}   style={spouseHandleStyle} />
+      <Handle id="spouse-right"  type="source" position={Position.Right}  style={spouseHandleStyle} />
 
       <Box sx={{ cursor: 'pointer' }}>
         <PersonNodeAvatar data={data} genderColors={genderColors} />
