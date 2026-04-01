@@ -54,6 +54,10 @@ export const PersonNode = ({ data, selected }) => {
     borderColor: selected ? genderColors.border : genderColors.primary,
     backgroundColor: theme.palette.background.paper,
     position: 'relative',
+    '&:hover .plus-btn': {
+      opacity: 1,
+      pointerEvents: 'auto',
+    },
   };
 
   const nodeId = data.id;
@@ -62,6 +66,13 @@ export const PersonNode = ({ data, selected }) => {
     e.stopPropagation();
     if (data.onClick) data.onClick({ ...data, nodeId: data.id });
   };
+
+  const plusBtnSx = (position) => ({
+    ...nodeStyles.plusButton(theme, position),
+    opacity: 0,
+    pointerEvents: 'none',
+    transition: 'opacity 0.15s ease',
+  });
 
   return (
     <Paper
@@ -73,71 +84,37 @@ export const PersonNode = ({ data, selected }) => {
       }}
       onClick={handleNodeClick}
     >
-      {/* Handles for parent/child */}
-      <Handle type="target" position={Position.Top} style={{ background: handleColor, width: 10, height: 10 }} />
-      <Handle type="source" position={Position.Bottom} style={{ background: handleColor, width: 10, height: 10 }} />
+      {/* Handles with explicit IDs */}
+      <Handle id="target-top" type="target" position={Position.Top} style={{ background: handleColor, width: 10, height: 10 }} />
+      <Handle id="source-bottom" type="source" position={Position.Bottom} style={{ background: handleColor, width: 10, height: 10 }} />
 
-      {/* Plus buttons */}
-      <Box
-        sx={nodeStyles.plusButton(theme, 'top')}
-        onClick={(e) => {
-          e.stopPropagation();
-          handleAddPerson({
-            data,
-            connections: [{ nodeId, type: 'parent' }],
-            onAddPerson: data.addPersonCallback,
-          });
-        }}
-      >
+      <Box className="plus-btn" sx={plusBtnSx('top')} onClick={(e) => {
+        e.stopPropagation();
+        if (data.addPersonCallback) data.addPersonCallback([{ nodeId, type: 'parent' }]);
+      }}>
         <Add fontSize="small" />
       </Box>
-
-      <Box
-        sx={nodeStyles.plusButton(theme, 'bottom')}
-        onClick={(e) => {
-          e.stopPropagation();
-          handleAddPerson({
-            data,
-            connections: [{ nodeId, type: 'child' }],
-            onAddPerson: data.addPersonCallback,
-          });
-        }}
-      >
+      <Box className="plus-btn" sx={plusBtnSx('bottom')} onClick={(e) => {
+        e.stopPropagation();
+        if (data.addPersonCallback) data.addPersonCallback([{ nodeId, type: 'child' }]);
+      }}>
         <Add fontSize="small" />
       </Box>
-
-      <Box
-        sx={nodeStyles.plusButton(theme, 'left')}
-        onClick={(e) => {
-          e.stopPropagation();
-          handleAddPerson({
-            data,
-            connections: [{ nodeId, type: 'spouse' }],
-            onAddPerson: data.addPersonCallback,
-          });
-        }}
-      >
+      <Box className="plus-btn" sx={plusBtnSx('left')} onClick={(e) => {
+        e.stopPropagation();
+        if (data.addPersonCallback) data.addPersonCallback([{ nodeId, type: 'spouse' }]);
+      }}>
         <Add fontSize="small" />
       </Box>
-
-      <Box
-        sx={nodeStyles.plusButton(theme, 'right')}
-        onClick={(e) => {
-          e.stopPropagation();
-          handleAddPerson({
-            data,
-            connections: [{ nodeId, type: 'spouse' }],
-            onAddPerson: data.addPersonCallback,
-          });
-        }}
-      >
+      <Box className="plus-btn" sx={plusBtnSx('right')} onClick={(e) => {
+        e.stopPropagation();
+        if (data.addPersonCallback) data.addPersonCallback([{ nodeId, type: 'spouse' }]);
+      }}>
         <Add fontSize="small" />
       </Box>
 
       {/* Node content */}
-      <Box
-        sx={{ cursor: 'pointer' }}
-      >
+      <Box sx={{ cursor: 'pointer' }}>
         <Box display="flex" alignItems="center" gap={1.5} mb={1}>
           <Avatar
             src={data.photo}

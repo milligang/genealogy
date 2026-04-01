@@ -71,11 +71,17 @@ export const FamilyTree = ({ currentTheme, onThemeToggle }) => {
       data: {
         ...node.data,
         onClick: () => handleNodeClick(node.id),
-        addPersonCallback: (...args) => handleAddPersonRef.current?.(...args),
+        addPersonCallback: (connections) => {
+          setAddPersonState({ open: true, data: null, connections, onAddPerson: null });
+        },
       },
     }),
     [handleNodeClick]
   );
+
+  useEffect(() => {
+    setNodes((nds) => nds.map(attachNodeCallbacks));
+  }, [attachNodeCallbacks]);
 
   // Load saved tree or initial tree
   useEffect(() => {
@@ -238,10 +244,7 @@ export const FamilyTree = ({ currentTheme, onThemeToggle }) => {
           setAddPersonState({ open: false, data: null, connections: [], onAddPerson: null })
         }
         onSave={({ formData, connections }) => {
-          if (addPersonState.onAddPerson) {
-            addPersonState.onAddPerson({ formData, connections });
-          }
-          setAddPersonState({ open: false, data: null, connections: [], onAddPerson: null });
+          handleAddPersonLocal({ formData, connections });
         }}
       />
 
