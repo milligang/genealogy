@@ -18,10 +18,11 @@ import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 const FEATURES = [
   { title: 'Profile photos', description: 'Add and crop photos for each person in your tree.', status: 'planned' },
   { title: 'Share & collaborate', description: 'Invite family members to view or edit the tree together.', status: 'planned' },
-  { title: 'Search & filter', description: 'Quickly find people by name, birth year, or relationship.', status: 'planned' },
-  { title: 'Timeline view', description: 'See your family history laid out chronologically.', status: 'planned' },
   { title: 'Export to PDF', description: 'Download a clean, printable version of your tree.', status: 'planned' },
-  { title: 'Custom node styles', description: 'Customize colors and styles for different branches.', status: 'planned' },
+  { title: 'Feedback', description: 'Share feedback to admin, not just to a void', status: 'planned' },
+  { title: 'Marriage Layout', description: 'Align married people horizontally, not vertically.', status: 'planned' },
+  { title: 'UI Improvements', description: 'A few in mind, please share your thoughts too!', status: 'planned' },
+  { title: 'Single Connection', description: 'Only allow one connection per pair (keep it acyclic).', status: 'planned' },
 ];
 
 const STATUS_LABEL = {
