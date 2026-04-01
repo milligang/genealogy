@@ -10,13 +10,14 @@ import ReactFlow, {
 import 'reactflow/dist/style.css';
 import { Box } from '@mui/material';
 
-import { PersonNode } from './PersonNode';
-import { PersonForm } from './PersonForm';
+import { PersonNode } from '../nodes/PersonNode';
+import { PersonForm } from '../editing/PersonForm';
 import { EditPanel } from '../editing/EditPanel';
 import { Sidebar } from '../layout/Sidebar';
+import { SpouseEdge } from '../edges/SpouseEdge';
+import { SpouseConnectionLine } from '../edges/SpouseConnection';
 import { ComingSoonDialog } from '../dialogs/ComingSoonDialog';
 import { FeedbackDialog } from '../dialogs/FeedbackDialog';
-import { EdgeTypeToggle } from '../controls/EdgeTypeToggle';
 
 import {
   loadFamilyData,
@@ -32,6 +33,7 @@ import { useModalBlur } from '../../hooks/useModalBlur';
 
 // Defined outside component to satisfy the React Flow nodeTypes stability requirement
 const nodeTypes = { personNode: PersonNode };
+const edgeTypes = { spouse: SpouseEdge };
 
 export const FamilyTree = ({ currentTheme, onThemeToggle }) => {
   const themeConfig = getThemeConfig(currentTheme);
@@ -42,9 +44,6 @@ export const FamilyTree = ({ currentTheme, onThemeToggle }) => {
   const [selectedNode, setSelectedNode] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
-
-  // The edge type the user intends to draw when dragging a new connection
-  const [pendingEdgeType, setPendingEdgeType] = useState('parentChild');
 
   const [addPersonState, setAddPersonState] = useState({
     open: false,
@@ -162,13 +161,15 @@ export const FamilyTree = ({ currentTheme, onThemeToggle }) => {
     setSelectedNode(null);
   };
 
-  // Uses pendingEdgeType chosen by the user via EdgeTypeToggle, not params.data
+  // Derive edge type from which handle was dragged — no toggle needed
   const onConnect = useCallback(
     (params) => {
-      const edgeConfig = themeConfig.edgeStyles[pendingEdgeType];
+      const isSpouse = params.sourceHandle?.startsWith('spouse');
+      const edgeType = isSpouse ? 'spouse' : 'parentChild';
+      const edgeConfig = themeConfig.edgeStyles[edgeType];
       setEdges((eds) => addEdge({ ...params, ...edgeConfig }, eds));
     },
-    [setEdges, themeConfig.edgeStyles, pendingEdgeType]
+    [setEdges, themeConfig.edgeStyles]
   );
 
   const handleReset = async () => {
@@ -222,6 +223,8 @@ export const FamilyTree = ({ currentTheme, onThemeToggle }) => {
           onEdgesChange={onEdgesChange}
           onConnect={onConnect}
           nodeTypes={nodeTypes}
+          edgeTypes={edgeTypes}
+          connectionLineComponent={SpouseConnectionLine}
           deleteKeyCode={null}
           fitView
         >
@@ -229,9 +232,6 @@ export const FamilyTree = ({ currentTheme, onThemeToggle }) => {
           <MiniMap />
           <Background {...themeConfig.flowBackgroundConfig} />
         </ReactFlow>
-
-        {/* Floating toggle so users choose edge type before dragging */}
-        <EdgeTypeToggle value={pendingEdgeType} onChange={setPendingEdgeType} />
       </Box>
 
       {selectedNode && (

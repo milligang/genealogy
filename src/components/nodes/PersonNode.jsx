@@ -17,20 +17,26 @@ export const PersonNode = ({ data, selected }) => {
   }
 
   const colors = theme.palette.mode === 'dark' ? darkColors : vintageColors;
+
   const genderColors = data.gender
     ? colors.gender[data.gender.toLowerCase()] || colors.gender.other
     : colors.gender.other;
 
-  const handleColor =
-    theme.palette.mode === 'dark'
-      ? theme.palette.primary.main
-      : theme.palette.secondary.main;
+  // Pull handle colors directly from theme color definitions
+  const parentChildColor = colors.nodeHandle;
+  const spouseColor = colors.edgeSpouse;
 
   const nodeBaseStyles = {
     ...nodeStyles.base,
     border: '2px solid',
     borderColor: selected ? genderColors.border : genderColors.primary,
     backgroundColor: theme.palette.background.paper,
+    // Selected state: use theme shadow style
+    ...(selected && {
+      boxShadow: theme.palette.mode === 'dark'
+        ? nodeStyles.selected.dark.boxShadow
+        : nodeStyles.selected.vintage.boxShadow,
+    }),
     position: 'relative',
     '&:hover .plus-btn': {
       opacity: 1,
@@ -43,23 +49,59 @@ export const PersonNode = ({ data, selected }) => {
     if (data.onClick) data.onClick({ ...data, nodeId: data.id });
   };
 
+  // Round handles for parent/child
+  const handleStyle = (color) => ({
+    background: color,
+    width: 10,
+    height: 10,
+    border: `2px solid ${color}`,
+    borderRadius: '50%',
+  });
+
+  // Diamond handles for spouse — visually distinct from parent/child
+  const spouseHandleStyle = {
+    background: spouseColor,
+    width: 10,
+    height: 10,
+    border: `2px solid ${spouseColor}`,
+    borderRadius: 0,
+    transform: 'rotate(45deg)',
+    top: '50%',
+    marginTop: -5,
+  };
+
   return (
     <Paper
       elevation={selected ? 6 : 3}
       sx={{ ...nodeBaseStyles, cursor: data.onClick ? 'pointer' : 'default' }}
       onClick={handleNodeClick}
     >
+      {/* Parent/child handles — top and bottom, round */}
       <Handle
-        id="target-top"
+        id="parent-target"
         type="target"
         position={Position.Top}
-        style={{ background: handleColor, width: 10, height: 10 }}
+        style={handleStyle(parentChildColor)}
       />
       <Handle
-        id="source-bottom"
+        id="child-source"
         type="source"
         position={Position.Bottom}
-        style={{ background: handleColor, width: 10, height: 10 }}
+        style={handleStyle(parentChildColor)}
+      />
+
+      {/* Spouse handles — left and right, diamond */}
+      <Handle
+        id="spouse-left"
+        type="source"
+        position={Position.Left}
+        style={spouseHandleStyle}
+      />
+      <Handle
+        id="spouse-right"
+        type="source"
+        position={Position.Right}
+        style={spouseHandleStyle}
       />
 
       <PlusButtons

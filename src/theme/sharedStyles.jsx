@@ -72,19 +72,20 @@ export const nodeStyles = {
 // Edge/Connection styling factory
 export const createEdgeStyles = (colors = {}) => ({
   parentChild: {
+    // Uses React Flow's built-in smoothstep renderer
     type: 'smoothstep',
-    style: { 
-      stroke: colors.edgeParentChild || '#667eea', 
+    style: {
+      stroke: colors.edgeParentChild || '#667eea',
       strokeWidth: 2,
     },
     animated: false,
   },
   spouse: {
-    type: 'step',
-    style: { 
-      stroke: colors.edgeSpouse || '#ec4899', 
+    // 'spouse' maps to the custom SpouseEdge component registered in edgeTypes
+    type: 'spouse',
+    style: {
+      stroke: colors.edgeSpouse || '#9d5c8f',
       strokeWidth: 2,
-      strokeDasharray: '5,5',
     },
     animated: false,
   },

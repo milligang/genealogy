@@ -26,19 +26,11 @@ export const darkTheme = createTheme({
   },
   typography: {
     fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif",
-    h6: {
-      fontWeight: 600,
-    },
-    subtitle1: {
-      fontWeight: 600,
-    },
-    button: {
-      fontWeight: 500,
-    },
+    h6: { fontWeight: 600 },
+    subtitle1: { fontWeight: 600 },
+    button: { fontWeight: 500 },
   },
-  shape: {
-    borderRadius: 12,
-  },
+  shape: { borderRadius: 12 },
   shadows: [
     'none',
     '0 2px 4px rgba(0, 0, 0, 0.2)',
@@ -54,57 +46,37 @@ export const darkTheme = createTheme({
   components: {
     MuiPaper: {
       styleOverrides: {
-        root: {
-          backgroundImage: 'none',
-        },
-        elevation2: {
-          border: '1px solid #4a5568',
-        },
-        elevation3: {
-          border: '1px solid #4a5568',
-        },
-        elevation4: {
-          border: '1px solid #4a5568',
-        },
+        root: { backgroundImage: 'none' },
+        elevation2: { border: '1px solid #4a5568' },
+        elevation3: { border: '1px solid #4a5568' },
+        elevation4: { border: '1px solid #4a5568' },
       },
     },
     MuiButton: {
       styleOverrides: {
-        root: {
-          textTransform: 'none',
-          borderRadius: 8,
-        },
+        root: { textTransform: 'none', borderRadius: 8 },
         contained: {
           boxShadow: '0 2px 8px rgba(102, 126, 234, 0.4)',
-          '&:hover': {
-            boxShadow: '0 4px 12px rgba(102, 126, 234, 0.6)',
-          },
+          '&:hover': { boxShadow: '0 4px 12px rgba(102, 126, 234, 0.6)' },
         },
         outlined: {
           borderWidth: '1px',
-          '&:hover': {
-            borderWidth: '1px',
-            backgroundColor: 'rgba(102, 126, 234, 0.08)',
-          },
+          '&:hover': { borderWidth: '1px', backgroundColor: 'rgba(102, 126, 234, 0.08)' },
         },
       },
     },
     MuiAvatar: {
       styleOverrides: {
-        root: {
-          border: '2px solid #2d3748',
-          boxShadow: '0 2px 8px rgba(0, 0, 0, 0.4)',
-        },
+        root: { border: '2px solid #2d3748', boxShadow: '0 2px 8px rgba(0, 0, 0, 0.4)' },
       },
     },
   },
 });
 
-// Dark theme colors for ReactFlow elements
 export const darkColors = {
   nodeHandle: '#667eea',
   edgeParentChild: '#667eea',
-  edgeSpouse: '#ec4899',
+  edgeSpouse: '#c084fc',   // purple — distinct from blue parent/child
   background: '#1a202c',
   backgroundDots: '#4a5568',
   gender: {
