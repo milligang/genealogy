@@ -17,11 +17,11 @@ import {
   Chip,
 } from '@mui/material';
 import { Close, CameraAlt } from '@mui/icons-material';
-import { FlexibleDatePicker } from '../utils/datePicker';
+import { FlexibleDatePicker } from '../../utils/datePicker';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
-import { loadFamilyData } from '../data/people';
-import optimizeImage from '../utils/imageOptimization';
+import { loadFamilyData } from '../../data/people';
+import optimizeImage from '../../utils/imageOptimization';
 
 const EMPTY_FORM = {
   firstName: '',

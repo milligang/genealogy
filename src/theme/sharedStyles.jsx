@@ -9,22 +9,6 @@ export const nodeStyles = {
     transition: 'all 0.2s',
   },
 
-  // Vintage theme has decorative inner border
-  vintage: {
-    '&::before': {
-      content: '""',
-      position: 'absolute',
-      top: '10px',
-      left: '10px',
-      right: '10px',
-      bottom: '10px',
-      border: '1px solid',
-      borderColor: 'divider',
-      borderRadius: '4px',
-      pointerEvents: 'none',
-    },
-  },
-
   hover: {
     elevation: 6,
     transform: 'translateY(-2px)',
@@ -43,7 +27,6 @@ export const nodeStyles = {
 
   plusButton: (theme, position) => {
     const size = 20;
-    const hoverSize = 26;
 
     let posStyles = {};
     switch (position) {

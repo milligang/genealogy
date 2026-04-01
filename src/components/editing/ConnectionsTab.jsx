@@ -13,108 +13,96 @@ import {
   ListItemSecondaryAction,
   IconButton,
   Chip,
+  useTheme,
 } from '@mui/material';
 import { Delete } from '@mui/icons-material';
+import { vintageColors } from '../../theme/vintageTheme';
+import { darkColors } from '../../theme/darkTheme';
+import getThemeConfig from '../../theme';
 
-export const ConnectionsTab = ({ currentNodeId, nodes, edges, onUpdateConnections }) => {
+export const ConnectionsTab = ({ currentNodeId, nodes, edges, onUpdateConnections, currentTheme }) => {
+  const theme = useTheme();
+  const themeConfig = getThemeConfig(currentTheme);
+  const colors = theme.palette.mode === 'dark' ? darkColors : vintageColors;
+
   const [selectedPerson, setSelectedPerson] = useState('');
   const [connectionType, setConnectionType] = useState('child');
 
   const getConnectedNodes = () => {
     if (!currentNodeId) return [];
     const connected = [];
-    
-    edges.forEach(edge => {
+
+    edges.forEach((edge) => {
       let relationType = '';
       let node = null;
-      
+
       if (edge.source === currentNodeId) {
-        node = nodes.find(n => n.id === edge.target);
+        node = nodes.find((n) => n.id === edge.target);
         relationType = edge.data?.type === 'spouse' ? 'spouse' : 'child';
       } else if (edge.target === currentNodeId) {
-        node = nodes.find(n => n.id === edge.source);
+        node = nodes.find((n) => n.id === edge.source);
         relationType = edge.data?.type === 'spouse' ? 'spouse' : 'parent';
       }
-      
+
       if (node) {
-        connected.push({ 
-          ...node, 
-          relationType, 
-          edgeId: edge.id 
-        });
+        connected.push({ ...node, relationType, edgeId: edge.id });
       }
     });
-    
+
     return connected;
   };
 
   const getAvailableNodes = () => {
     if (!currentNodeId) return nodes;
-    const connectedIds = getConnectedNodes().map(n => n.id);
-    
-    // For spouse connections, exclude already married people
+    const connectedIds = getConnectedNodes().map((n) => n.id);
+
     if (connectionType === 'spouse') {
       const spouseIds = getConnectedNodes()
-        .filter(n => n.relationType === 'spouse')
-        .map(n => n.id);
-      return nodes.filter(n => 
-        n.id !== currentNodeId && 
-        !spouseIds.includes(n.id)
-      );
+        .filter((n) => n.relationType === 'spouse')
+        .map((n) => n.id);
+      return nodes.filter((n) => n.id !== currentNodeId && !spouseIds.includes(n.id));
     }
-    
-    return nodes.filter(n => n.id !== currentNodeId && !connectedIds.includes(n.id));
+
+    return nodes.filter((n) => n.id !== currentNodeId && !connectedIds.includes(n.id));
   };
 
   const handleAddConnection = () => {
-    if (selectedPerson && currentNodeId) {
-      let newEdge;
-      
-      if (connectionType === 'spouse') {
-        // Spouse connections are bidirectional
-        newEdge = {
-          source: currentNodeId,
-          target: selectedPerson,
-          data: { type: 'spouse' }
-        };
-      } else if (connectionType === 'child') {
-        // Current person is parent, selected is child
-        newEdge = {
-          source: currentNodeId,
-          target: selectedPerson,
-          data: { type: 'parent-child' }
-        };
-      } else {
-        // Current person is child, selected is parent
-        newEdge = {
-          source: selectedPerson,
-          target: currentNodeId,
-          data: { type: 'parent-child' }
-        };
-      }
-      
-      onUpdateConnections([...edges, {
+    if (!selectedPerson || !currentNodeId) return;
+
+    const edgeType = connectionType === 'spouse' ? 'spouse' : 'parentChild';
+    const edgeConfig = themeConfig.edgeStyles[edgeType];
+
+    let newEdge;
+    if (connectionType === 'spouse') {
+      newEdge = { source: currentNodeId, target: selectedPerson };
+    } else if (connectionType === 'child') {
+      newEdge = { source: currentNodeId, target: selectedPerson };
+    } else {
+      // 'parent' — selected person is the parent
+      newEdge = { source: selectedPerson, target: currentNodeId };
+    }
+
+    onUpdateConnections([
+      ...edges,
+      {
         id: `e${currentNodeId}-${selectedPerson}-${Date.now()}`,
         ...newEdge,
-        type: connectionType === 'spouse' ? 'step' : 'smoothstep',
-        animated: false,
-        style: connectionType === 'spouse' ? { stroke: '#ec4899', strokeWidth: 2 } : undefined
-      }]);
-      
-      setSelectedPerson('');
-    }
+        ...edgeConfig,
+      },
+    ]);
+
+    setSelectedPerson('');
   };
 
   const handleRemoveConnection = (edgeId) => {
-    onUpdateConnections(edges.filter(e => e.id !== edgeId));
+    onUpdateConnections(edges.filter((e) => e.id !== edgeId));
   };
 
-  const getPersonDisplayName = (node) => {
-    return node.data.goesBy || node.data.firstName || 'Unnamed';
-  };
+  const getPersonDisplayName = (node) =>
+    node.data.goesBy || node.data.firstName || 'Unnamed';
 
   const getRelationChipColor = (type) => {
-    switch(type) {
+    switch (type) {
       case 'spouse': return 'secondary';
       case 'parent': return 'primary';
       case 'child': return 'success';
@@ -124,7 +112,9 @@ export const ConnectionsTab = ({ currentNodeId, nodes, edges, onUpdateConnection
 
   return (
     <Box>
-      <Typography variant="subtitle2" mb={2}>Add Connection</Typography>
+      <Typography variant="subtitle2" mb={2}>
+        Add Connection
+      </Typography>
       <Box display="flex" gap={2} mb={2}>
         <FormControl fullWidth size="small">
           <InputLabel>Person</InputLabel>
@@ -133,7 +123,7 @@ export const ConnectionsTab = ({ currentNodeId, nodes, edges, onUpdateConnection
             onChange={(e) => setSelectedPerson(e.target.value)}
             label="Person"
           >
-            {getAvailableNodes().map(node => (
+            {getAvailableNodes().map((node) => (
               <MenuItem key={node.id} value={node.id}>
                 {getPersonDisplayName(node)}
               </MenuItem>
@@ -153,8 +143,8 @@ export const ConnectionsTab = ({ currentNodeId, nodes, edges, onUpdateConnection
           </Select>
         </FormControl>
       </Box>
-      <Button 
-        variant="outlined" 
+      <Button
+        variant="outlined"
         onClick={handleAddConnection}
         disabled={!selectedPerson}
         fullWidth
@@ -163,22 +153,22 @@ export const ConnectionsTab = ({ currentNodeId, nodes, edges, onUpdateConnection
         Add Connection
       </Button>
 
-      <Typography variant="subtitle2" mb={1}>Current Connections</Typography>
+      <Typography variant="subtitle2" mb={1}>
+        Current Connections
+      </Typography>
       <List>
         {getConnectedNodes().map((node) => (
           <ListItem key={node.edgeId} dense>
-            <ListItemText 
-              primary={getPersonDisplayName(node)}
-            />
-            <Chip 
-              label={node.relationType} 
-              size="small" 
+            <ListItemText primary={getPersonDisplayName(node)} />
+            <Chip
+              label={node.relationType}
+              size="small"
               color={getRelationChipColor(node.relationType)}
               sx={{ mr: 1 }}
             />
             <ListItemSecondaryAction>
-              <IconButton 
-                edge="end" 
+              <IconButton
+                edge="end"
                 size="small"
                 onClick={() => handleRemoveConnection(node.edgeId)}
               >
@@ -188,7 +178,11 @@ export const ConnectionsTab = ({ currentNodeId, nodes, edges, onUpdateConnection
           </ListItem>
         ))}
         {getConnectedNodes().length === 0 && (
-          <Typography variant="body2" color="text.secondary" sx={{ p: 2, textAlign: 'center' }}>
+          <Typography
+            variant="body2"
+            color="text.secondary"
+            sx={{ p: 2, textAlign: 'center' }}
+          >
             No connections yet
           </Typography>
         )}

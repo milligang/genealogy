@@ -12,32 +12,40 @@ import { Box } from '@mui/material';
 
 import { PersonNode } from './PersonNode';
 import { PersonForm } from './PersonForm';
-import { EditPanel } from './EditPanel';
-import { Sidebar } from './Sidebar';
-import { ComingSoonDialog } from './ComingSoonDialog';
-import { FeedbackDialog } from './FeedbackDialog';
+import { EditPanel } from '../editing/EditPanel';
+import { Sidebar } from '../layout/Sidebar';
+import { ComingSoonDialog } from '../dialogs/ComingSoonDialog';
+import { FeedbackDialog } from '../dialogs/FeedbackDialog';
+import { EdgeTypeToggle } from '../controls/EdgeTypeToggle';
 
 import {
   loadFamilyData,
   saveFamilyData,
   initialFamilyData,
   clearFamilyData,
-} from '../data/people';
-import { getLayoutedElements } from '../utils/layoutUtils';
-import getThemeConfig from '../theme';
-import { initPlusUtil, handleAddPerson } from '../utils/handleAddPerson';
-import { createEdgesFromConnections, createNodeFromFormData } from '../utils/appHelpers';
+} from '../../data/people';
+import { getLayoutedElements } from '../../utils/layoutUtils';
+import getThemeConfig from '../../theme';
+import { initPlusUtil, handleAddPerson } from '../../utils/handleAddPerson';
+import { createEdgesFromConnections, createNodeFromFormData } from '../../utils/appHelpers';
+import { useModalBlur } from '../../hooks/useModalBlur';
 
+// Defined outside component to satisfy the React Flow nodeTypes stability requirement
 const nodeTypes = { personNode: PersonNode };
 
 export const FamilyTree = ({ currentTheme, onThemeToggle }) => {
   const themeConfig = getThemeConfig(currentTheme);
+  const openModal = useModalBlur();
 
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
   const [selectedNode, setSelectedNode] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
+
+  // The edge type the user intends to draw when dragging a new connection
+  const [pendingEdgeType, setPendingEdgeType] = useState('parentChild');
+
   const [addPersonState, setAddPersonState] = useState({
     open: false,
     data: null,
@@ -59,12 +67,16 @@ export const FamilyTree = ({ currentTheme, onThemeToggle }) => {
   const handleNodeClick = useCallback((nodeId) => {
     setNodes((currentNodes) => {
       const live = currentNodes.find((n) => n.id === nodeId);
-      if (live) setSelectedNode(live);
+      if (live) {
+        // Blur before "opening" the edit panel so aria-hidden on #root
+        // doesn't trap the still-focused React Flow node
+        openModal(() => setSelectedNode(live));
+      }
       return currentNodes;
     });
-  }, []);
+  }, [openModal]);
 
-  // Attach stable callbacks to a node's data — centralised so it's consistent everywhere
+  // Attach stable callbacks to a node's data
   const attachNodeCallbacks = useCallback(
     (node) => ({
       ...node,
@@ -72,11 +84,13 @@ export const FamilyTree = ({ currentTheme, onThemeToggle }) => {
         ...node.data,
         onClick: () => handleNodeClick(node.id),
         addPersonCallback: (connections) => {
-          setAddPersonState({ open: true, data: null, connections, onAddPerson: null });
+          openModal(() =>
+            setAddPersonState({ open: true, data: null, connections, onAddPerson: null })
+          );
         },
       },
     }),
-    [handleNodeClick]
+    [handleNodeClick, openModal]
   );
 
   useEffect(() => {
@@ -109,7 +123,7 @@ export const FamilyTree = ({ currentTheme, onThemeToggle }) => {
     loadData();
   }, []);
 
-  // Save nodes & edges
+  // Save nodes & edges whenever they change (after initial load)
   useEffect(() => {
     if (!isLoading && hasLoadedOnce) {
       try {
@@ -120,7 +134,7 @@ export const FamilyTree = ({ currentTheme, onThemeToggle }) => {
     }
   }, [nodes, edges, isLoading, hasLoadedOnce]);
 
-  // Add person handler — stored in ref so node callbacks are never stale
+  // Add person handler
   const handleAddPersonLocal = useCallback(
     ({ formData, connections = [] }) => {
       const baseNode = createNodeFromFormData(formData);
@@ -140,7 +154,6 @@ export const FamilyTree = ({ currentTheme, onThemeToggle }) => {
     [attachNodeCallbacks, themeConfig]
   );
 
-  // Keep ref in sync with latest handler
   handleAddPersonRef.current = handleAddPersonLocal;
 
   const handleDeleteNode = (nodeId) => {
@@ -149,13 +162,13 @@ export const FamilyTree = ({ currentTheme, onThemeToggle }) => {
     setSelectedNode(null);
   };
 
+  // Uses pendingEdgeType chosen by the user via EdgeTypeToggle, not params.data
   const onConnect = useCallback(
     (params) => {
-      const edgeType = params.data?.type === 'spouse' ? 'spouse' : 'parentChild';
-      const edgeConfig = themeConfig.edgeStyles[edgeType];
+      const edgeConfig = themeConfig.edgeStyles[pendingEdgeType];
       setEdges((eds) => addEdge({ ...params, ...edgeConfig }, eds));
     },
-    [setEdges, themeConfig.edgeStyles]
+    [setEdges, themeConfig.edgeStyles, pendingEdgeType]
   );
 
   const handleReset = async () => {
@@ -184,9 +197,11 @@ export const FamilyTree = ({ currentTheme, onThemeToggle }) => {
     <Box sx={{ width: '100%', height: '100vh', display: 'flex' }}>
       <Sidebar
         onAddPerson={() =>
-          handleAddPerson({
-            onAddPerson: (...args) => handleAddPersonRef.current?.(...args),
-          })
+          openModal(() =>
+            handleAddPerson({
+              onAddPerson: (...args) => handleAddPersonRef.current?.(...args),
+            })
+          )
         }
         onAutoLayout={handleAutoLayout}
         onReset={handleReset}
@@ -195,8 +210,8 @@ export const FamilyTree = ({ currentTheme, onThemeToggle }) => {
         onImport={handleImport}
         currentTheme={currentTheme}
         onThemeToggle={onThemeToggle}
-        onOpenFeedback={() => setFeedbackOpen(true)}
-        onOpenComingSoon={() => setComingSoonOpen(true)}
+        onOpenFeedback={() => openModal(() => setFeedbackOpen(true))}
+        onOpenComingSoon={() => openModal(() => setComingSoonOpen(true))}
       />
 
       <Box sx={{ flex: 1, position: 'relative' }}>
@@ -214,6 +229,9 @@ export const FamilyTree = ({ currentTheme, onThemeToggle }) => {
           <MiniMap />
           <Background {...themeConfig.flowBackgroundConfig} />
         </ReactFlow>
+
+        {/* Floating toggle so users choose edge type before dragging */}
+        <EdgeTypeToggle value={pendingEdgeType} onChange={setPendingEdgeType} />
       </Box>
 
       {selectedNode && (

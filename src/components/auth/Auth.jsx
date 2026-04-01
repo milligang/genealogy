@@ -11,8 +11,8 @@ import {
   Tab,
   Container,
 } from '@mui/material';
-import supabase from '../supabaseClient';
-import { useAuth } from '../context/AuthContext';
+import supabase from '../../supabaseClient';
+import { useAuth } from '../../context/AuthContext';
 
 export const Auth = () => {
   const navigate = useNavigate();

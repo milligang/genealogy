@@ -6,13 +6,13 @@ import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
 
 import { AuthProvider } from './context/AuthContext';
-import { ProtectedRoute } from './components/ProtectedRoute';
-import { ErrorBoundary } from './components/ErrorBoundary';
+import { ProtectedRoute } from './components/auth/ProtectedRoute';
+import { ErrorBoundary } from './components/dialogs/ErrorBoundary';
 import getThemeConfig, { THEMES } from './theme';
 
 // Lazy load heavy components
-const Auth = lazy(() => import('./components/Auth').then(module => ({ default: module.Auth })));
-const FamilyTree = lazy(() => import('./components/FamilyTree').then(module => ({ default: module.FamilyTree })));
+const Auth = lazy(() => import('./components/auth/Auth').then(module => ({ default: module.Auth })));
+const FamilyTree = lazy(() => import('./components/tree/FamilyTree').then(module => ({ default: module.FamilyTree })));
 
 // Loading component
 const LoadingFallback = () => (

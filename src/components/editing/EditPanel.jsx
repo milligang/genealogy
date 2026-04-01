@@ -16,22 +16,34 @@ import {
   useTheme,
 } from '@mui/material';
 import { Close, CameraAlt, DeleteForever } from '@mui/icons-material';
-import { FlexibleDatePicker } from '../utils/datePicker';
-import { getPersonDisplayName, getPersonInitials } from '../utils/appHelpers';
-import optimizeImage from '../utils/imageOptimization';
-import { vintageColors } from '../theme/vintageTheme';
-import { darkColors } from '../theme/darkTheme';
+import { FlexibleDatePicker } from '../../utils/datePicker';
+import { getPersonDisplayName, getPersonInitials } from '../../utils/appHelpers';
+import optimizeImage from '../../utils/imageOptimization';
+import { vintageColors } from '../../theme/vintageTheme';
+import { darkColors } from '../../theme/darkTheme';
 import { ConnectionsTab } from './ConnectionsTab';
 
-export const EditPanel = ({ selectedNode, onClose, onSave, onDelete, nodes, edges, onUpdateConnections }) => {
+export const EditPanel = ({
+  selectedNode,
+  onClose,
+  onSave,
+  onDelete,
+  nodes,
+  edges,
+  onUpdateConnections,
+  currentTheme,
+}) => {
   const theme = useTheme();
   const colors = theme.palette.mode === 'dark' ? darkColors : vintageColors;
   const [tabValue, setTabValue] = useState(0);
-
-  // Local state for edits
   const [formData, setFormData] = useState(selectedNode.data || {});
 
-  // Reset form when selectedNode changes
+  // Muted destructive color — pulls from the palette rather than MUI's bold error red
+  const deleteColor =
+    theme.palette.mode === 'dark'
+      ? { bg: '#6b3a3a', hover: '#7d4444', text: '#e8c4c4' }
+      : { bg: '#8b5c52', hover: '#7a4f47', text: '#fff' };
+
   useEffect(() => {
     setFormData(selectedNode.data || {});
     setTabValue(0);
@@ -59,7 +71,11 @@ export const EditPanel = ({ selectedNode, onClose, onSave, onDelete, nodes, edge
 
   const handleDelete = () => {
     const name = getPersonDisplayName(formData) || 'this person';
-    if (window.confirm(`Are you sure you want to delete ${name}? This will also remove all their connections and cannot be undone.`)) {
+    if (
+      window.confirm(
+        `Are you sure you want to delete ${name}? This will also remove all their connections and cannot be undone.`
+      )
+    ) {
       onDelete(selectedNode.id);
     }
   };
@@ -112,7 +128,6 @@ export const EditPanel = ({ selectedNode, onClose, onSave, onDelete, nodes, edge
               </Button>
             </Box>
 
-            {/* Text fields */}
             <TextField
               label="First Name"
               fullWidth
@@ -151,7 +166,6 @@ export const EditPanel = ({ selectedNode, onClose, onSave, onDelete, nodes, edge
               </Select>
             </FormControl>
 
-            {/* Dates */}
             <FlexibleDatePicker
               label="Birth Date"
               value={formData.birthDate}
@@ -163,7 +177,6 @@ export const EditPanel = ({ selectedNode, onClose, onSave, onDelete, nodes, edge
               onChange={(date) => handleChange('deathDate', date)}
             />
 
-            {/* Notes */}
             <TextField
               label="Notes"
               fullWidth
@@ -186,12 +199,20 @@ export const EditPanel = ({ selectedNode, onClose, onSave, onDelete, nodes, edge
 
             <Divider />
 
+            {/* Muted destructive button — same 'contained' shape, subdued palette color */}
             <Button
-              variant="outlined"
-              color="error"
+              variant="contained"
               startIcon={<DeleteForever />}
               onClick={handleDelete}
-              sx={{ mt: 0.5 }}
+              sx={{
+                mt: 0.5,
+                backgroundColor: deleteColor.bg,
+                color: deleteColor.text,
+                '&:hover': {
+                  backgroundColor: deleteColor.hover,
+                },
+                boxShadow: 'none',
+              }}
             >
               Delete Person
             </Button>
@@ -204,6 +225,7 @@ export const EditPanel = ({ selectedNode, onClose, onSave, onDelete, nodes, edge
             nodes={nodes}
             edges={edges}
             onUpdateConnections={onUpdateConnections}
+            currentTheme={currentTheme}
           />
         )}
       </Box>

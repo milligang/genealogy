@@ -26,11 +26,11 @@ import {
   AutoAwesome,
   AutoFixHigh,
 } from '@mui/icons-material';
-import { THEMES } from '../theme';
-import { useTreeIO } from '../utils/useTreeIO';
-import { useAuth } from '../context/AuthContext';
-import { FeedbackDialog } from './FeedbackDialog';
-import { ComingSoonDialog } from './ComingSoonDialog';
+import { THEMES } from '../../theme';
+import { useTreeIO } from '../../hooks/useTreeIO';
+import { useAuth } from '../../context/AuthContext';
+import { FeedbackDialog } from '../dialogs/FeedbackDialog';
+import { ComingSoonDialog } from '../dialogs/ComingSoonDialog';
 
 const EXPANDED_WIDTH = 200;
 const COLLAPSED_WIDTH = 56;
