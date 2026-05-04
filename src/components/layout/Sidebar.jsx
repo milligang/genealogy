@@ -26,6 +26,7 @@ import {
   AutoAwesome,
   AutoFixHigh,
   CloudUpload,
+  Login,
 } from '@mui/icons-material';
 import { THEMES } from '../../theme';
 import { useTreeIO } from '../../hooks/useTreeIO';
@@ -75,6 +76,9 @@ export const Sidebar = ({
   onSaveToCloud,
   saveDisabled = false,
   saveTooltip = 'Save tree to cloud',
+  showCloudSave = true,
+  isGuest = false,
+  onNavigateToLogin,
   addPersonDisabled = false,
   addPersonDisabledTitle = '',
   familyModel,
@@ -134,11 +138,18 @@ export const Sidebar = ({
           }}
         >
           {expanded && (
-            <Box display="flex" alignItems="center" gap={1}>
-              <AccountTree fontSize="small" color="primary" />
-              <Typography variant="subtitle1" fontWeight={600} noWrap>
-                Family Tree
-              </Typography>
+            <Box display="flex" flexDirection="column" alignItems="flex-start" gap={0.25} minWidth={0}>
+              <Box display="flex" alignItems="center" gap={1}>
+                <AccountTree fontSize="small" color="primary" />
+                <Typography variant="subtitle1" fontWeight={600} noWrap>
+                  Family Tree
+                </Typography>
+              </Box>
+              {isGuest && (
+                <Typography variant="caption" color="text.secondary" sx={{ lineHeight: 1.2, pl: 3.5 }}>
+                  Guest · local only
+                </Typography>
+              )}
             </Box>
           )}
           <IconButton size="small" onClick={() => setExpanded((e) => !e)}>
@@ -182,17 +193,19 @@ export const Sidebar = ({
             accept=".json"
             onChange={handleFileChange}
           />
-          <Tooltip title={saveTooltip} placement="right" arrow>
-            <Box component="span" sx={{ width: '100%', display: 'block' }}>
-              <SidebarButton
-                expanded={expanded}
-                icon={<CloudUpload fontSize="small" />}
-                label="Save to cloud"
-                onClick={onSaveToCloud}
-                disabled={saveDisabled}
-              />
-            </Box>
-          </Tooltip>
+          {showCloudSave && (
+            <Tooltip title={saveTooltip} placement="right" arrow>
+              <Box component="span" sx={{ width: '100%', display: 'block' }}>
+                <SidebarButton
+                  expanded={expanded}
+                  icon={<CloudUpload fontSize="small" />}
+                  label="Save to cloud"
+                  onClick={onSaveToCloud}
+                  disabled={saveDisabled}
+                />
+              </Box>
+            </Tooltip>
+          )}
           <SidebarButton
             expanded={expanded}
             icon={<AutoFixHigh fontSize="small" />}
@@ -277,28 +290,38 @@ export const Sidebar = ({
         <Box sx={{ flex: 1 }} />
         <Divider />
 
-        {/* Account */}
+        {/* Account or guest sign-in */}
         <Box sx={{ p: 1 }}>
-          <SidebarButton
-            expanded={expanded}
-            icon={<AccountCircle fontSize="small" />}
-            label="Account"
-            onClick={(e) => setAccountAnchor(e.currentTarget)}
-          />
+          {isGuest ? (
+            <SidebarButton
+              expanded={expanded}
+              icon={<Login fontSize="small" />}
+              label="Sign in"
+              onClick={() => onNavigateToLogin?.()}
+            />
+          ) : (
+            <SidebarButton
+              expanded={expanded}
+              icon={<AccountCircle fontSize="small" />}
+              label="Account"
+              onClick={(e) => setAccountAnchor(e.currentTarget)}
+            />
+          )}
         </Box>
       </Paper>
 
-      {/* Account menu */}
-      <Menu
-        anchorEl={accountAnchor}
-        open={Boolean(accountAnchor)}
-        onClose={() => setAccountAnchor(null)}
-      >
-        <MenuItem disabled>{user?.email}</MenuItem>
-        <MenuItem onClick={async () => { await signOut(); setAccountAnchor(null); }}>
-          Logout
-        </MenuItem>
-      </Menu>
+      {!isGuest && (
+        <Menu
+          anchorEl={accountAnchor}
+          open={Boolean(accountAnchor)}
+          onClose={() => setAccountAnchor(null)}
+        >
+          <MenuItem disabled>{user?.email}</MenuItem>
+          <MenuItem onClick={async () => { await signOut(); setAccountAnchor(null); }}>
+            Logout
+          </MenuItem>
+        </Menu>
+      )}
 
       {/* Dialogs */}
       <ComingSoonDialog open={comingSoonOpen} onClose={() => setComingSoonOpen(false)} />

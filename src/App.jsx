@@ -7,6 +7,7 @@ import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
 
 import { AuthProvider } from './context/AuthContext';
 import { ProtectedRoute } from './components/auth/ProtectedRoute';
+import { AuthSessionNotice } from './components/auth/AuthSessionNotice';
 import { ErrorBoundary } from './components/dialogs/ErrorBoundary';
 import getThemeConfig, { THEMES } from './theme';
 
@@ -50,9 +51,20 @@ function App() {
         <LocalizationProvider dateAdapter={AdapterDayjs}>
           <AuthProvider>
             <Router>
+              <AuthSessionNotice />
               <Suspense fallback={<LoadingFallback />}>
                 <Routes>
                   <Route path="/login" element={<Auth />} />
+                  <Route
+                    path="/guest"
+                    element={
+                      <FamilyTree
+                        currentTheme={currentTheme}
+                        onThemeToggle={toggleTheme}
+                        isGuest
+                      />
+                    }
+                  />
                   <Route 
                     path="/" 
                     element={

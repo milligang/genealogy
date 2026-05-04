@@ -145,16 +145,31 @@ export const Auth = () => {
               >
                 {loading ? 'Loading...' : tabValue === 0 ? 'Sign In' : 'Sign Up'}
               </Button>
+
+              <Button
+                type="button"
+                variant="outlined"
+                size="large"
+                fullWidth
+                disabled={loading}
+                onClick={() => navigate('/guest')}
+              >
+                Continue as guest
+              </Button>
             </Box>
           </form>
 
           {tabValue === 0 && (
             <Box sx={{ mt: 2, textAlign: 'center' }}>
               <Typography variant="body2" color="text.secondary">
-                Don't have an account? Switch to Sign Up
+                Don&apos;t have an account? Switch to Sign Up
               </Typography>
             </Box>
           )}
+
+          <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 2, textAlign: 'center' }}>
+            Guest mode uses this tab only—nothing is uploaded, and your tree is discarded when you close the tab.
+          </Typography>
         </Paper>
       </Container>
     </Box>

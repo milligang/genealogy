@@ -179,18 +179,67 @@ async function tryMigrateLegacyFamilyTrees(userId) {
   return model;
 }
 
-/** Persists the full tree for the current user. Call only from explicit Save, not on every edit. */
-export const saveFamilyData = async (model) => {
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) {
-    return { ok: false, error: new Error('Not signed in') };
+export const SAVE_ERROR_CODES = {
+  MISSING_EXPECTED_USER: 'MISSING_EXPECTED_USER',
+  NOT_AUTHENTICATED: 'NOT_AUTHENTICATED',
+  SESSION_MISMATCH: 'SESSION_MISMATCH',
+  REMOTE_ERROR: 'REMOTE_ERROR',
+};
+
+/**
+ * Persists the full tree for the current user. Call only from explicit Save, not on every edit.
+ * @param {object} model — canonical family model
+ * @param {{ expectedUserId: string }} options — caller’s signed-in user id; must match `getUser()` or save is rejected.
+ */
+export const saveFamilyData = async (model, options = {}) => {
+  const { expectedUserId } = options;
+  if (!expectedUserId || typeof expectedUserId !== 'string') {
+    return {
+      ok: false,
+      code: SAVE_ERROR_CODES.MISSING_EXPECTED_USER,
+      userMessage: 'Save could not run (missing account). Reload the page and sign in again.',
+      error: new Error('expectedUserId required'),
+    };
   }
+
+  const { data: { user }, error: userError } = await supabase.auth.getUser();
+  if (userError) {
+    console.error('saveFamilyData getUser error:', userError);
+    return {
+      ok: false,
+      code: SAVE_ERROR_CODES.NOT_AUTHENTICATED,
+      userMessage: userError.message || 'Could not verify your sign-in. Try signing in again.',
+      error: userError,
+    };
+  }
+  if (!user) {
+    return {
+      ok: false,
+      code: SAVE_ERROR_CODES.NOT_AUTHENTICATED,
+      userMessage: 'You are not signed in. Sign in to save to the cloud.',
+      error: new Error('Not signed in'),
+    };
+  }
+  if (user.id !== expectedUserId) {
+    return {
+      ok: false,
+      code: SAVE_ERROR_CODES.SESSION_MISMATCH,
+      userMessage: 'Your session does not match this page. Reload and sign in again.',
+      error: new Error('Session user id mismatch'),
+    };
+  }
+
   try {
     await replaceUserFamilyRemote(user.id, model);
     return { ok: true };
   } catch (error) {
     console.error('Error saving to Supabase:', error);
-    return { ok: false, error };
+    return {
+      ok: false,
+      code: SAVE_ERROR_CODES.REMOTE_ERROR,
+      userMessage: error?.message || 'Save failed. Try again.',
+      error,
+    };
   }
 };
 

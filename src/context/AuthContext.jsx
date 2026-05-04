@@ -1,5 +1,9 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import supabase from '../supabaseClient';
+import {
+  recoverAuthSession,
+  humanAuthErrorMessage,
+} from '../utils/authSessionRecovery';
 
 const AuthContext = createContext({});
 
@@ -14,35 +18,51 @@ export const useAuth = () => {
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const [authNotice, setAuthNotice] = useState(null);
+
+  const clearAuthNotice = useCallback(() => {
+    setAuthNotice(null);
+  }, []);
 
   useEffect(() => {
     let mounted = true;
+    let subscription = { unsubscribe: () => {} };
 
-    // Fetch session once
-    supabase.auth.getSession()
-      .then(({ data: { session }, error }) => {
-        if (mounted) {
-          if (error) {
-            console.error('Session error:', error);
-            setError(error);
-          }
-          setUser(session?.user ?? null);
-          setLoading(false);
-        }
-      })
-      .catch(err => {
-        if (mounted) {
-          console.error('Session catch error:', err);
-          setError(err);
-          setLoading(false);
-        }
-      });
+    (async () => {
+      try {
+        const result = await recoverAuthSession();
+        if (!mounted) return;
 
-    // Subscribe to auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (mounted) setUser(session?.user ?? null);
-    });
+        setUser(result.user ?? null);
+
+        if (result.recoveredFromInvalidStorage) {
+          setAuthNotice(
+            'Your saved sign-in was no longer valid and has been cleared on this device. Sign in again to use cloud save.',
+          );
+        } else if (result.error && !result.user) {
+          setAuthNotice(humanAuthErrorMessage(result.error));
+        }
+
+        setLoading(false);
+
+        const { data } = supabase.auth.onAuthStateChange((_event, session) => {
+          if (mounted) setUser(session?.user ?? null);
+        });
+        subscription = data.subscription;
+        if (!mounted) subscription.unsubscribe();
+      } catch (err) {
+        console.error('Auth init error:', err);
+        if (!mounted) return;
+        try {
+          await supabase.auth.signOut({ scope: 'local' });
+        } catch {
+          /* ignore */
+        }
+        setUser(null);
+        setAuthNotice(humanAuthErrorMessage(err));
+        setLoading(false);
+      }
+    })();
 
     return () => {
       mounted = false;
@@ -51,15 +71,16 @@ export const AuthProvider = ({ children }) => {
   }, []);
 
   const signOut = async () => {
+    setAuthNotice(null);
     const { error } = await supabase.auth.signOut();
     if (error) {
       console.error('Sign out error:', error);
-      setError(error);
+      setAuthNotice(humanAuthErrorMessage(error));
     }
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, error, signOut }}>
+    <AuthContext.Provider value={{ user, loading, authNotice, clearAuthNotice, signOut }}>
       {children}
     </AuthContext.Provider>
   );

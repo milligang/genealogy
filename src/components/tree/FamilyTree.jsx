@@ -7,6 +7,7 @@ import ReactFlow, {
   useEdgesState,
 } from 'reactflow';
 import 'reactflow/dist/style.css';
+import { useNavigate } from 'react-router-dom';
 import { Box, Snackbar, Alert } from '@mui/material';
 
 import { PersonNode } from '../nodes/PersonNode';
@@ -48,15 +49,17 @@ import {
   countPeople,
   isAtOrOverPersonLimit,
 } from '../../config/treePolicy';
+import { GUEST_DRAFT_USER_ID } from '../../constants/guest';
 
 const nodeTypes = { personNode: PersonNode, unionNode: UnionNode };
 const edgeTypes = { spouse: SpouseEdge };
 
 const DRAFT_DEBOUNCE_MS = 500;
 
-export const FamilyTree = ({ currentTheme, onThemeToggle }) => {
+export const FamilyTree = ({ currentTheme, onThemeToggle, isGuest = false }) => {
   const themeConfig = getThemeConfig(currentTheme);
   const openModal = useModalBlur();
+  const navigate = useNavigate();
   const { user } = useAuth();
 
   const [familyModel, setFamilyModel] = useState(() => createSeedFamilyModel());
@@ -189,28 +192,58 @@ export const FamilyTree = ({ currentTheme, onThemeToggle }) => {
   }, [syncGraphFromModel]);
 
   useEffect(() => {
+    if (isGuest) {
+      setDirty(false);
+      return;
+    }
     setDirty(serializeFamilyModel(familyModel) !== lastCloudSerializedRef.current);
-  }, [familyModel]);
+  }, [familyModel, isGuest]);
 
   useEffect(() => {
-    if (isLoading || !user?.id) return undefined;
+    if (isLoading) return undefined;
+
+    const draftUserId = isGuest ? GUEST_DRAFT_USER_ID : user?.id;
+    if (!draftUserId) return undefined;
+
     if (draftDebounceRef.current) window.clearTimeout(draftDebounceRef.current);
     draftDebounceRef.current = window.setTimeout(() => {
       const positions = {};
       for (const n of nodes) {
         positions[n.id] = { x: n.position.x, y: n.position.y };
       }
-      writeSessionDraft(user.id, { familyModel, positions });
+      writeSessionDraft(draftUserId, { familyModel, positions });
     }, DRAFT_DEBOUNCE_MS);
     return () => {
       if (draftDebounceRef.current) window.clearTimeout(draftDebounceRef.current);
     };
-  }, [familyModel, nodes, isLoading, user?.id]);
+  }, [familyModel, nodes, isLoading, user?.id, isGuest]);
 
   useEffect(() => {
+    if (isGuest) {
+      const draft = readSessionDraft(GUEST_DRAFT_USER_ID);
+      const seed = createSeedFamilyModel();
+      lastCloudSerializedRef.current = serializeFamilyModel(seed);
+      if (draft?.familyModel) {
+        lastCloudSerializedRef.current = serializeFamilyModel(draft.familyModel);
+        pendingPositionsRef.current = draft.positions || {};
+        draftPositionsAppliedRef.current = false;
+        setFamilyModel(draft.familyModel);
+      } else {
+        draftPositionsAppliedRef.current = true;
+        pendingPositionsRef.current = null;
+        setFamilyModel(seed);
+      }
+      setIsLoading(false);
+      return;
+    }
+
+    if (!user?.id) return;
+
+    let cancelled = false;
     const loadData = async () => {
       try {
         const remoteModel = await loadFamilyData();
+        if (cancelled) return;
         const remoteSnap = serializeFamilyModel(remoteModel);
         lastCloudSerializedRef.current = remoteSnap;
 
@@ -229,21 +262,46 @@ export const FamilyTree = ({ currentTheme, onThemeToggle }) => {
         }
       } catch (err) {
         console.error('Failed to load family data:', err);
+        if (cancelled) return;
+        setToast({
+          severity: 'error',
+          message:
+            err?.message?.includes('fetch') || err?.message?.toLowerCase()?.includes('network')
+              ? 'Could not load your tree from the server. Check your connection and reload.'
+              : 'Could not load your tree from the server. You can keep editing; try Save when things look stable.',
+        });
         const seed = createSeedFamilyModel();
         lastCloudSerializedRef.current = serializeFamilyModel(seed);
         setFamilyModel(seed);
       } finally {
-        setIsLoading(false);
+        if (!cancelled) setIsLoading(false);
       }
     };
-    if (user?.id) loadData();
-  }, [user?.id]);
+    loadData();
+    return () => {
+      cancelled = true;
+    };
+  }, [isGuest, user?.id]);
 
   const updateModel = useCallback((fn) => {
     setFamilyModel((m) => fn(m));
   }, []);
 
   const handleSaveToCloud = useCallback(async () => {
+    if (isGuest) {
+      setToast({
+        severity: 'warning',
+        message: 'Guest mode cannot save to the cloud. Sign in from the login page to keep a copy online.',
+      });
+      return;
+    }
+    if (!user?.id) {
+      setToast({
+        severity: 'error',
+        message: 'You are not signed in. Open Sign in / Account and sign in, then try Save again.',
+      });
+      return;
+    }
     if (!online) {
       setToast({ severity: 'warning', message: 'You are offline. Stay on this page; use Save when you are back online.' });
       return;
@@ -258,7 +316,7 @@ export const FamilyTree = ({ currentTheme, onThemeToggle }) => {
       return;
     }
 
-    const result = await saveFamilyData(familyModel);
+    const result = await saveFamilyData(familyModel, { expectedUserId: user.id });
     if (result.ok) {
       lastCloudSerializedRef.current = serializeFamilyModel(familyModel);
       setSaveCooldownUntil(Date.now() + MIN_MS_BETWEEN_CLOUD_SAVES);
@@ -268,10 +326,10 @@ export const FamilyTree = ({ currentTheme, onThemeToggle }) => {
     } else {
       setToast({
         severity: 'error',
-        message: result.error?.message || 'Save failed. Try again.',
+        message: result.userMessage || result.error?.message || 'Save failed. Try again.',
       });
     }
-  }, [online, dirty, familyModel, user?.id, saveCooldownUntil]);
+  }, [isGuest, online, dirty, familyModel, user?.id, saveCooldownUntil]);
 
   const handleAddPersonLocal = useCallback(
     ({ formData, connections = [] }) => {
@@ -337,9 +395,10 @@ export const FamilyTree = ({ currentTheme, onThemeToggle }) => {
   );
 
   const handleReset = async () => {
-    if (window.confirm('Are you sure you want to reset all data? This cannot be undone.')) {
-      await clearFamilyData();
-      clearSessionDraft(user.id);
+    if (!window.confirm('Are you sure you want to reset all data? This cannot be undone.')) return;
+
+    if (isGuest) {
+      clearSessionDraft(GUEST_DRAFT_USER_ID);
       const seed = createSeedFamilyModel();
       lastCloudSerializedRef.current = serializeFamilyModel(seed);
       setSaveCooldownUntil(0);
@@ -347,7 +406,18 @@ export const FamilyTree = ({ currentTheme, onThemeToggle }) => {
       pendingPositionsRef.current = null;
       setFamilyModel(seed);
       setSelectedId(null);
+      return;
     }
+
+    await clearFamilyData();
+    clearSessionDraft(user.id);
+    const seed = createSeedFamilyModel();
+    lastCloudSerializedRef.current = serializeFamilyModel(seed);
+    setSaveCooldownUntil(0);
+    draftPositionsAppliedRef.current = true;
+    pendingPositionsRef.current = null;
+    setFamilyModel(seed);
+    setSelectedId(null);
   };
 
   const handleAutoLayout = useCallback(() => {
@@ -374,15 +444,24 @@ export const FamilyTree = ({ currentTheme, onThemeToggle }) => {
 
   void cooldownClock;
   let saveDisabledReason = '';
-  if (!online) saveDisabledReason = 'Offline — open this tab when online to save.';
-  else if (!dirty) saveDisabledReason = 'No unsaved changes.';
-  else {
-    const left = saveCooldownUntil - Date.now();
-    if (left > 0) saveDisabledReason = `Save available in ${Math.ceil(left / 1000)}s.`;
+  if (!isGuest) {
+    if (!online) saveDisabledReason = 'Offline — open this tab when online to save.';
+    else if (!dirty) saveDisabledReason = 'No unsaved changes.';
+    else {
+      const left = saveCooldownUntil - Date.now();
+      if (left > 0) saveDisabledReason = `Save available in ${Math.ceil(left / 1000)}s.`;
+    }
   }
 
   return (
-    <Box sx={{ width: '100%', height: '100vh', display: 'flex' }}>
+    <Box sx={{ width: '100%', height: '100vh', display: 'flex', flexDirection: 'column' }}>
+      {isGuest && (
+        <Alert severity="info" sx={{ borderRadius: 0, py: 0.5 }}>
+          Guest mode: your tree stays in this browser tab only (session storage for refresh). It is not saved to the
+          server and is removed when you close the tab. Use Sign in to keep a cloud copy.
+        </Alert>
+      )}
+      <Box sx={{ flex: 1, display: 'flex', minHeight: 0 }}>
       <Sidebar
         onAddPerson={() => {
           if (atPersonLimit) {
@@ -399,9 +478,12 @@ export const FamilyTree = ({ currentTheme, onThemeToggle }) => {
         }}
         onAutoLayout={handleAutoLayout}
         onReset={handleReset}
+        isGuest={isGuest}
+        showCloudSave={!isGuest}
         onSaveToCloud={handleSaveToCloud}
         saveDisabled={Boolean(saveDisabledReason)}
         saveTooltip={saveDisabledReason || 'Save tree to cloud'}
+        onNavigateToLogin={isGuest ? () => navigate('/login') : undefined}
         addPersonDisabled={atPersonLimit}
         addPersonDisabledTitle={`This tree allows at most ${MAX_PEOPLE_IN_TREE} people (see src/config/treePolicy.js; align with backend later).`}
         familyModel={familyModel}
@@ -486,6 +568,7 @@ export const FamilyTree = ({ currentTheme, onThemeToggle }) => {
           </Alert>
         ) : null}
       </Snackbar>
+      </Box>
     </Box>
   );
 };
