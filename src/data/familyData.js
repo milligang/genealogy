@@ -193,16 +193,18 @@ async function tryMigrateLegacyFamilyTrees(userId) {
   return model;
 }
 
+/** Persists the full tree for the current user. Call only from explicit Save, not on every edit. */
 export const saveFamilyData = async (model) => {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) {
-    console.error('User not authenticated');
-    return;
+    return { ok: false, error: new Error('Not signed in') };
   }
   try {
     await replaceUserFamilyRemote(user.id, model);
+    return { ok: true };
   } catch (error) {
     console.error('Error saving to Supabase:', error);
+    return { ok: false, error };
   }
 };
 

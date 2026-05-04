@@ -42,6 +42,8 @@ export const PersonForm = ({
   initialData,
   initialConnections = [],
   availablePeople,
+  addBlocked = false,
+  addBlockedMessage = '',
 }) => {
   const [formData, setFormData] = useState(EMPTY_FORM);
   const [connections, setConnections] = useState([]);
@@ -133,7 +135,7 @@ export const PersonForm = ({
   };
 
   const handleSubmit = () => {
-    if (!formData.goesBy) return;
+    if (!formData.goesBy || addBlocked) return;
     // Pass both formData and connections up — FamilyTree.onSave expects { formData, connections }
     onSave({ formData, connections });
     setFormData(EMPTY_FORM);
@@ -315,11 +317,22 @@ export const PersonForm = ({
           </Box>
         </DialogContent>
 
-        <DialogActions>
-          <Button onClick={onClose}>Cancel</Button>
-          <Button variant="contained" onClick={handleSubmit} disabled={!formData.goesBy}>
-            Add Person
-          </Button>
+        <DialogActions sx={{ flexDirection: 'column', alignItems: 'stretch', gap: 1 }}>
+          {addBlocked && (
+            <Typography variant="caption" color="text.secondary" sx={{ px: 1 }}>
+              {addBlockedMessage}
+            </Typography>
+          )}
+          <Box display="flex" justifyContent="flex-end" gap={1} width="100%">
+            <Button onClick={onClose}>Cancel</Button>
+            <Button
+              variant="contained"
+              onClick={handleSubmit}
+              disabled={!formData.goesBy || addBlocked}
+            >
+              Add Person
+            </Button>
+          </Box>
         </DialogActions>
       </Dialog>
     </LocalizationProvider>

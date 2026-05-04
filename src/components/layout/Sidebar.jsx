@@ -25,6 +25,7 @@ import {
   ChatBubbleOutline,
   AutoAwesome,
   AutoFixHigh,
+  CloudUpload,
 } from '@mui/icons-material';
 import { THEMES } from '../../theme';
 import { useTreeIO } from '../../hooks/useTreeIO';
@@ -71,6 +72,11 @@ export const Sidebar = ({
   onAddPerson,
   onAutoLayout,
   onReset,
+  onSaveToCloud,
+  saveDisabled = false,
+  saveTooltip = 'Save tree to cloud',
+  addPersonDisabled = false,
+  addPersonDisabledTitle = '',
   familyModel,
   onImport,
   currentTheme,
@@ -142,12 +148,21 @@ export const Sidebar = ({
 
         {/* Top buttons */}
         <Box sx={{ p: 1, display: 'flex', flexDirection: 'column', gap: 0.5 }}>
-          <SidebarButton
-            expanded={expanded}
-            icon={<PersonAdd fontSize="small" />}
-            label="Add Person"
-            onClick={onAddPerson}
-          />
+          <Tooltip
+            title={addPersonDisabled ? addPersonDisabledTitle : ''}
+            placement="right"
+            arrow
+          >
+            <Box component="span" sx={{ width: '100%', display: 'block' }}>
+              <SidebarButton
+                expanded={expanded}
+                icon={<PersonAdd fontSize="small" />}
+                label="Add Person"
+                onClick={onAddPerson}
+                disabled={addPersonDisabled}
+              />
+            </Box>
+          </Tooltip>
           <SidebarButton
             expanded={expanded}
             icon={<Download fontSize="small" />}
@@ -167,6 +182,17 @@ export const Sidebar = ({
             accept=".json"
             onChange={handleFileChange}
           />
+          <Tooltip title={saveTooltip} placement="right" arrow>
+            <Box component="span" sx={{ width: '100%', display: 'block' }}>
+              <SidebarButton
+                expanded={expanded}
+                icon={<CloudUpload fontSize="small" />}
+                label="Save to cloud"
+                onClick={onSaveToCloud}
+                disabled={saveDisabled}
+              />
+            </Box>
+          </Tooltip>
           <SidebarButton
             expanded={expanded}
             icon={<AutoFixHigh fontSize="small" />}

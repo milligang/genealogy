@@ -7,7 +7,7 @@ import ReactFlow, {
   useEdgesState,
 } from 'reactflow';
 import 'reactflow/dist/style.css';
-import { Box } from '@mui/material';
+import { Box, Snackbar, Alert } from '@mui/material';
 
 import { PersonNode } from '../nodes/PersonNode';
 import { UnionNode } from '../nodes/UnionNode';
@@ -31,6 +31,7 @@ import getThemeConfig from '../../theme';
 import { initPlusUtil, handleAddPerson } from '../../utils/handleAddPerson';
 import { createPersonFromFormData } from '../../utils/appHelpers';
 import { useModalBlur } from '../../hooks/useModalBlur';
+import { useAuth } from '../../context/AuthContext';
 import { buildReactFlowGraph } from '../../domain/buildReactFlowGraph';
 import {
   addPerson,
@@ -39,21 +40,36 @@ import {
   linkChildToParent,
   deletePerson,
 } from '../../domain/familyMutations';
+import { serializeFamilyModel } from '../../utils/serializeFamilyModel';
+import { writeSessionDraft, readSessionDraft, clearSessionDraft } from '../../utils/sessionFamilyDraft';
+import {
+  MAX_PEOPLE_IN_TREE,
+  MIN_MS_BETWEEN_CLOUD_SAVES,
+  countPeople,
+  isAtOrOverPersonLimit,
+} from '../../config/treePolicy';
 
 const nodeTypes = { personNode: PersonNode, unionNode: UnionNode };
 const edgeTypes = { spouse: SpouseEdge };
 
+const DRAFT_DEBOUNCE_MS = 500;
+
 export const FamilyTree = ({ currentTheme, onThemeToggle }) => {
   const themeConfig = getThemeConfig(currentTheme);
   const openModal = useModalBlur();
+  const { user } = useAuth();
 
   const [familyModel, setFamilyModel] = useState(() => createSeedFamilyModel());
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
   const [selectedId, setSelectedId] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
   const [isDraggingSpouse, setIsDraggingSpouse] = useState(false);
+  const [online, setOnline] = useState(() => typeof navigator !== 'undefined' && navigator.onLine);
+  const [dirty, setDirty] = useState(false);
+  const [saveCooldownUntil, setSaveCooldownUntil] = useState(0);
+  const [cooldownClock, setCooldownClock] = useState(0);
+  const [toast, setToast] = useState(null);
 
   const [addPersonState, setAddPersonState] = useState({
     open: false,
@@ -65,6 +81,10 @@ export const FamilyTree = ({ currentTheme, onThemeToggle }) => {
   const [feedbackOpen, setFeedbackOpen] = useState(false);
 
   const handleAddPersonRef = useRef(null);
+  const lastCloudSerializedRef = useRef('');
+  const pendingPositionsRef = useRef(null);
+  const draftPositionsAppliedRef = useRef(false);
+  const draftDebounceRef = useRef(null);
 
   const selectedNode = useMemo(
     () => nodes.find((n) => n.id === selectedId && n.type === 'personNode') ?? null,
@@ -80,9 +100,28 @@ export const FamilyTree = ({ currentTheme, onThemeToggle }) => {
     [familyModel.people],
   );
 
+  const atPersonLimit = isAtOrOverPersonLimit(familyModel);
+
   useEffect(() => {
     initPlusUtil((open, payload) => setAddPersonState({ open, ...payload }));
   }, []);
+
+  useEffect(() => {
+    const up = () => setOnline(true);
+    const down = () => setOnline(false);
+    window.addEventListener('online', up);
+    window.addEventListener('offline', down);
+    return () => {
+      window.removeEventListener('online', up);
+      window.removeEventListener('offline', down);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (saveCooldownUntil <= Date.now()) return undefined;
+    const id = window.setInterval(() => setCooldownClock((c) => c + 1), 1000);
+    return () => window.clearInterval(id);
+  }, [saveCooldownUntil]);
 
   const handleNodeClick = useCallback(
     (nodeId) => {
@@ -116,49 +155,132 @@ export const FamilyTree = ({ currentTheme, onThemeToggle }) => {
     [handleNodeClick, openModal],
   );
 
-  const rebuildFlow = useCallback(() => {
-    const { nodes: rawNodes, edges: rawEdges } = buildReactFlowGraph(familyModel, themeConfig);
-    const { nodes: layoutedNodes, edges: layoutedEdges } = getLayoutedElements(rawNodes, rawEdges);
-    setNodes(layoutedNodes.map(attachNodeCallbacks));
-    setEdges(layoutedEdges);
+  /** Sync graph structure from model; keep existing node positions (manual layout). */
+  const syncGraphFromModel = useCallback(() => {
+    const { nodes: raw, edges: nextEdges } = buildReactFlowGraph(familyModel, themeConfig);
+    setEdges(nextEdges);
+    setNodes((prev) => {
+      const posById = new Map(prev.map((n) => [n.id, n.position]));
+      const pending = pendingPositionsRef.current;
+      if (!draftPositionsAppliedRef.current && pending && typeof pending === 'object') {
+        for (const [id, pos] of Object.entries(pending)) {
+          if (pos && typeof pos.x === 'number' && typeof pos.y === 'number') {
+            posById.set(id, { x: pos.x, y: pos.y });
+          }
+        }
+        draftPositionsAppliedRef.current = true;
+        pendingPositionsRef.current = null;
+      }
+      let i = 0;
+      return raw.map((n) => {
+        const pos =
+          posById.get(n.id) ??
+          (() => {
+            const idx = i++;
+            return { x: 80 + (idx % 5) * 200, y: 60 + Math.floor(idx / 5) * 120 };
+          })();
+        return attachNodeCallbacks({ ...n, position: pos });
+      });
+    });
   }, [familyModel, themeConfig, attachNodeCallbacks, setNodes, setEdges]);
 
   useEffect(() => {
-    rebuildFlow();
-  }, [rebuildFlow]);
+    syncGraphFromModel();
+  }, [syncGraphFromModel]);
+
+  useEffect(() => {
+    setDirty(serializeFamilyModel(familyModel) !== lastCloudSerializedRef.current);
+  }, [familyModel]);
+
+  useEffect(() => {
+    if (isLoading || !user?.id) return undefined;
+    if (draftDebounceRef.current) window.clearTimeout(draftDebounceRef.current);
+    draftDebounceRef.current = window.setTimeout(() => {
+      const positions = {};
+      for (const n of nodes) {
+        positions[n.id] = { x: n.position.x, y: n.position.y };
+      }
+      writeSessionDraft(user.id, { familyModel, positions });
+    }, DRAFT_DEBOUNCE_MS);
+    return () => {
+      if (draftDebounceRef.current) window.clearTimeout(draftDebounceRef.current);
+    };
+  }, [familyModel, nodes, isLoading, user?.id]);
 
   useEffect(() => {
     const loadData = async () => {
       try {
-        const model = await loadFamilyData();
-        setFamilyModel(model);
+        const remoteModel = await loadFamilyData();
+        const remoteSnap = serializeFamilyModel(remoteModel);
+        lastCloudSerializedRef.current = remoteSnap;
+
+        const draft = readSessionDraft(user.id);
+        if (draft && serializeFamilyModel(draft.familyModel) !== remoteSnap) {
+          pendingPositionsRef.current = draft.positions || {};
+          draftPositionsAppliedRef.current = false;
+          setFamilyModel(draft.familyModel);
+        } else {
+          pendingPositionsRef.current = null;
+          draftPositionsAppliedRef.current = true;
+          setFamilyModel(remoteModel);
+          if (draft && serializeFamilyModel(draft.familyModel) === remoteSnap) {
+            clearSessionDraft(user.id);
+          }
+        }
       } catch (err) {
         console.error('Failed to load family data:', err);
-        setFamilyModel(createSeedFamilyModel());
+        const seed = createSeedFamilyModel();
+        lastCloudSerializedRef.current = serializeFamilyModel(seed);
+        setFamilyModel(seed);
       } finally {
         setIsLoading(false);
-        setHasLoadedOnce(true);
       }
     };
-    loadData();
-  }, []);
-
-  useEffect(() => {
-    if (!isLoading && hasLoadedOnce) {
-      try {
-        saveFamilyData(familyModel);
-      } catch (err) {
-        console.error('Failed to save family data:', err);
-      }
-    }
-  }, [familyModel, isLoading, hasLoadedOnce]);
+    if (user?.id) loadData();
+  }, [user?.id]);
 
   const updateModel = useCallback((fn) => {
     setFamilyModel((m) => fn(m));
   }, []);
 
+  const handleSaveToCloud = useCallback(async () => {
+    if (!online) {
+      setToast({ severity: 'warning', message: 'You are offline. Stay on this page; use Save when you are back online.' });
+      return;
+    }
+    if (!dirty) {
+      setToast({ severity: 'info', message: 'Nothing new to save.' });
+      return;
+    }
+    if (Date.now() < saveCooldownUntil) {
+      const wait = Math.ceil((saveCooldownUntil - Date.now()) / 1000);
+      setToast({ severity: 'info', message: `Please wait ${wait}s between cloud saves.` });
+      return;
+    }
+
+    const result = await saveFamilyData(familyModel);
+    if (result.ok) {
+      lastCloudSerializedRef.current = serializeFamilyModel(familyModel);
+      setSaveCooldownUntil(Date.now() + MIN_MS_BETWEEN_CLOUD_SAVES);
+      setDirty(false);
+      clearSessionDraft(user.id);
+      setToast({ severity: 'success', message: 'Saved to cloud.' });
+    } else {
+      setToast({
+        severity: 'error',
+        message: result.error?.message || 'Save failed. Try again.',
+      });
+    }
+  }, [online, dirty, familyModel, user?.id, saveCooldownUntil]);
+
   const handleAddPersonLocal = useCallback(
     ({ formData, connections = [] }) => {
+      if (isAtOrOverPersonLimit(familyModel)) {
+        window.alert(
+          `This tree can have at most ${MAX_PEOPLE_IN_TREE} people (client limit; adjustable later with the backend).`,
+        );
+        return;
+      }
       const person = createPersonFromFormData(formData);
       setFamilyModel((m) => {
         let next = addPerson(m, person);
@@ -167,7 +289,7 @@ export const FamilyTree = ({ currentTheme, onThemeToggle }) => {
       });
       setAddPersonState({ open: false, data: null, connections: [], onAddPerson: null });
     },
-    [],
+    [familyModel],
   );
 
   handleAddPersonRef.current = handleAddPersonLocal;
@@ -217,32 +339,71 @@ export const FamilyTree = ({ currentTheme, onThemeToggle }) => {
   const handleReset = async () => {
     if (window.confirm('Are you sure you want to reset all data? This cannot be undone.')) {
       await clearFamilyData();
-      setFamilyModel(createSeedFamilyModel());
+      clearSessionDraft(user.id);
+      const seed = createSeedFamilyModel();
+      lastCloudSerializedRef.current = serializeFamilyModel(seed);
+      setSaveCooldownUntil(0);
+      draftPositionsAppliedRef.current = true;
+      pendingPositionsRef.current = null;
+      setFamilyModel(seed);
       setSelectedId(null);
     }
   };
 
-  const handleAutoLayout = () => {
-    rebuildFlow();
-  };
+  const handleAutoLayout = useCallback(() => {
+    const { nodes: raw, edges: nextEdges } = buildReactFlowGraph(familyModel, themeConfig);
+    const { nodes: layouted, edges: layoutedEdges } = getLayoutedElements(raw, nextEdges);
+    setEdges(layoutedEdges);
+    setNodes(layouted.map(attachNodeCallbacks));
+  }, [familyModel, themeConfig, attachNodeCallbacks, setNodes, setEdges]);
 
-  const handleImport = (model) => {
-    setFamilyModel(model);
-    saveFamilyData(model);
-  };
+  const handleImport = useCallback(
+    (model) => {
+      if (countPeople(model) > MAX_PEOPLE_IN_TREE) {
+        window.alert(
+          `That file has too many people (max ${MAX_PEOPLE_IN_TREE}). Trim the tree or raise the limit in code/backend.`,
+        );
+        return;
+      }
+      draftPositionsAppliedRef.current = true;
+      pendingPositionsRef.current = null;
+      setFamilyModel(model);
+    },
+    [],
+  );
+
+  void cooldownClock;
+  let saveDisabledReason = '';
+  if (!online) saveDisabledReason = 'Offline — open this tab when online to save.';
+  else if (!dirty) saveDisabledReason = 'No unsaved changes.';
+  else {
+    const left = saveCooldownUntil - Date.now();
+    if (left > 0) saveDisabledReason = `Save available in ${Math.ceil(left / 1000)}s.`;
+  }
 
   return (
     <Box sx={{ width: '100%', height: '100vh', display: 'flex' }}>
       <Sidebar
-        onAddPerson={() =>
+        onAddPerson={() => {
+          if (atPersonLimit) {
+            window.alert(
+              `You reached the maximum of ${MAX_PEOPLE_IN_TREE} people. Remove someone or raise the limit later.`,
+            );
+            return;
+          }
           openModal(() =>
             handleAddPerson({
               onAddPerson: (...args) => handleAddPersonRef.current?.(...args),
             }),
-          )
-        }
+          );
+        }}
         onAutoLayout={handleAutoLayout}
         onReset={handleReset}
+        onSaveToCloud={handleSaveToCloud}
+        saveDisabled={Boolean(saveDisabledReason)}
+        saveTooltip={saveDisabledReason || 'Save tree to cloud'}
+        addPersonDisabled={atPersonLimit}
+        addPersonDisabledTitle={`This tree allows at most ${MAX_PEOPLE_IN_TREE} people (see src/config/treePolicy.js; align with backend later).`}
         familyModel={familyModel}
         onImport={handleImport}
         currentTheme={currentTheme}
@@ -300,6 +461,8 @@ export const FamilyTree = ({ currentTheme, onThemeToggle }) => {
         initialData={addPersonState.data}
         initialConnections={addPersonState.connections ?? []}
         availablePeople={availablePeople}
+        addBlocked={atPersonLimit}
+        addBlockedMessage={`Maximum ${MAX_PEOPLE_IN_TREE} people reached.`}
         onClose={() =>
           setAddPersonState({ open: false, data: null, connections: [], onAddPerson: null })
         }
@@ -310,6 +473,19 @@ export const FamilyTree = ({ currentTheme, onThemeToggle }) => {
 
       <ComingSoonDialog open={comingSoonOpen} onClose={() => setComingSoonOpen(false)} />
       <FeedbackDialog open={feedbackOpen} onClose={() => setFeedbackOpen(false)} />
+
+      <Snackbar
+        open={Boolean(toast)}
+        autoHideDuration={5000}
+        onClose={() => setToast(null)}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      >
+        {toast ? (
+          <Alert severity={toast.severity} onClose={() => setToast(null)} sx={{ width: '100%' }}>
+            {toast.message}
+          </Alert>
+        ) : null}
+      </Snackbar>
     </Box>
   );
 };
