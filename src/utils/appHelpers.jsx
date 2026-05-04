@@ -1,58 +1,21 @@
 // Helper functions for App.jsx
 
-// Create edges from connections data
-export const createEdgesFromConnections = (newNodeId, connections, themeConfig) => {
-    return connections.map(conn => {
-      let edge;
-      
-      if (conn.type === 'spouse') {
-        edge = {
-          source: newNodeId,
-          target: conn.personId,
-          data: { type: 'spouse' }
-        };
-      } else if (conn.type === 'child') {
-        // New person is parent, connected person is child
-        edge = {
-          source: newNodeId,
-          target: conn.personId,
-          data: { type: 'parent-child' }
-        };
-      } else {
-        // New person is child, connected person is parent
-        edge = {
-          source: conn.personId,
-          target: newNodeId,
-          data: { type: 'parent-child' }
-        };
-      }
-      
-      const edgeType = conn.type === 'spouse' ? 'spouse' : 'parentChild';
-      const edgeConfig = themeConfig.edgeStyles[edgeType];
-      
-      return {
-        id: `e${newNodeId}-${conn.personId}-${Date.now()}-${Math.random()}`,
-        ...edge,
-        ...edgeConfig,
-      };
-    });
+/** Build a person record (with new id) from PersonForm data */
+export const createPersonFromFormData = (formData) => {
+  const id = crypto.randomUUID();
+  return {
+    id,
+    firstName: formData.firstName ?? '',
+    middleName: formData.middleName ?? '',
+    lastName: formData.lastName ?? '',
+    goesBy: formData.goesBy ?? '',
+    gender: formData.gender ?? '',
+    birthDate: formData.birthDate ? formData.birthDate.toISOString() : null,
+    deathDate: formData.deathDate ? formData.deathDate.toISOString() : null,
+    photo: formData.photo ?? '',
+    notes: formData.notes ?? '',
   };
-  
-  // Create a new node from form data
-  export const createNodeFromFormData = (formData) => {
-    const newNodeId = `${Date.now()}`;
-    
-    return {
-      id: newNodeId,
-      type: 'personNode',
-      position: { x: Math.random() * 400 + 100, y: Math.random() * 300 + 100 },
-      data: {
-        ...formData,
-        birthDate: formData.birthDate ? formData.birthDate.toISOString() : null,
-        deathDate: formData.deathDate ? formData.deathDate.toISOString() : null,
-      },
-    };
-  };
+};
   
   // Get display name for a person
   export const getPersonDisplayName = (nodeData) => {

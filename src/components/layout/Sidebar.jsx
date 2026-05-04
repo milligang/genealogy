@@ -35,50 +35,8 @@ import { ComingSoonDialog } from '../dialogs/ComingSoonDialog';
 const EXPANDED_WIDTH = 200;
 const COLLAPSED_WIDTH = 56;
 
-export const Sidebar = ({
-  onAddPerson,
-  onAutoLayout,
-  onReset,
-  nodes,
-  edges,
-  onImport,
-  currentTheme,
-  onThemeToggle,
-}) => {
-  const { user, signOut } = useAuth();
-  const [expanded, setExpanded] = useState(false);
-  const [accountAnchor, setAccountAnchor] = useState(null);
-  const [feedbackOpen, setFeedbackOpen] = useState(false);
-  const [comingSoonOpen, setComingSoonOpen] = useState(false);
-  const pendingImport = useRef(null);
-  const fileInputRef = useRef(null);
-
-  const { exportTree } = useTreeIO(nodes, edges, onImport);
-
-  const handleFileChange = (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      try {
-        const parsed = JSON.parse(event.target.result);
-        pendingImport.current = parsed;
-        if (window.confirm('Replace your tree with this file?')) {
-          const { nodes, edges } = pendingImport.current;
-          onImport(nodes, edges);
-          pendingImport.current = null;
-        }
-      } catch {
-        alert('Invalid file — please upload a family tree JSON file.');
-      }
-    };
-    reader.readAsText(file);
-    e.target.value = '';
-  };
-
-  const isVintage = currentTheme === THEMES.VINTAGE;
-
-  const SidebarButton = ({ icon, label, onClick, color, disabled }) => (
+function SidebarButton({ expanded, icon, label, onClick, color, disabled }) {
+  return (
     <Tooltip title={expanded ? '' : label} placement="right" arrow>
       <Button
         fullWidth
@@ -107,6 +65,36 @@ export const Sidebar = ({
       </Button>
     </Tooltip>
   );
+}
+
+export const Sidebar = ({
+  onAddPerson,
+  onAutoLayout,
+  onReset,
+  familyModel,
+  onImport,
+  currentTheme,
+  onThemeToggle,
+}) => {
+  const { user, signOut } = useAuth();
+  const [expanded, setExpanded] = useState(false);
+  const [accountAnchor, setAccountAnchor] = useState(null);
+  const [feedbackOpen, setFeedbackOpen] = useState(false);
+  const [comingSoonOpen, setComingSoonOpen] = useState(false);
+  const fileInputRef = useRef(null);
+
+  const { exportTree, importTree } = useTreeIO(familyModel, (model) => {
+    if (window.confirm('Replace your tree with this file?')) {
+      onImport(model);
+    }
+  });
+
+  const handleFileChange = (e) => {
+    importTree(e);
+    e.target.value = '';
+  };
+
+  const isVintage = currentTheme === THEMES.VINTAGE;
 
   return (
     <>
@@ -155,16 +143,19 @@ export const Sidebar = ({
         {/* Top buttons */}
         <Box sx={{ p: 1, display: 'flex', flexDirection: 'column', gap: 0.5 }}>
           <SidebarButton
+            expanded={expanded}
             icon={<PersonAdd fontSize="small" />}
             label="Add Person"
             onClick={onAddPerson}
           />
           <SidebarButton
+            expanded={expanded}
             icon={<Download fontSize="small" />}
             label="Download backup"
             onClick={exportTree}
           />
           <SidebarButton
+            expanded={expanded}
             icon={<Upload fontSize="small" />}
             label="Upload tree"
             onClick={() => fileInputRef.current?.click()}
@@ -177,11 +168,13 @@ export const Sidebar = ({
             onChange={handleFileChange}
           />
           <SidebarButton
+            expanded={expanded}
             icon={<AutoFixHigh fontSize="small" />}
             label="Auto layout"
             onClick={onAutoLayout}
           />
           <SidebarButton
+            expanded={expanded}
             icon={<RestartAlt fontSize="small" />}
             label="Reset data"
             onClick={onReset}
@@ -240,6 +233,7 @@ export const Sidebar = ({
 
           {/* Coming Soon */}
           <SidebarButton
+            expanded={expanded}
             icon={<AutoAwesome fontSize="small" />}
             label="Coming soon"
             onClick={() => setComingSoonOpen(true)}
@@ -247,6 +241,7 @@ export const Sidebar = ({
 
           {/* Feedback / Feature Request */}
           <SidebarButton
+            expanded={expanded}
             icon={<ChatBubbleOutline fontSize="small" />}
             label="Feedback"
             onClick={() => setFeedbackOpen(true)}
@@ -259,6 +254,7 @@ export const Sidebar = ({
         {/* Account */}
         <Box sx={{ p: 1 }}>
           <SidebarButton
+            expanded={expanded}
             icon={<AccountCircle fontSize="small" />}
             label="Account"
             onClick={(e) => setAccountAnchor(e.currentTarget)}

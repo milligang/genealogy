@@ -39,36 +39,9 @@ npm install
 
 1. Create a [Supabase account](https://supabase.com)
 2. Create a new project
-3. Run this SQL in the SQL Editor:
+3. Run the SQL in `supabase/migrations/001_relational_family.sql` in the SQL Editor (people, unions, union junction tables, optional legacy `family_trees` for one-time migration).
 
-```sql
-CREATE TABLE family_trees (
-  id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
-  user_id uuid REFERENCES auth.users NOT NULL,
-  nodes jsonb NOT NULL,
-  edges jsonb NOT NULL,
-  updated_at timestamp with time zone DEFAULT now(),
-  UNIQUE(user_id)
-);
-
-ALTER TABLE family_trees ENABLE ROW LEVEL SECURITY;
-
-CREATE POLICY "Users can view their own family tree"
-  ON family_trees FOR SELECT
-  USING (auth.uid() = user_id);
-
-CREATE POLICY "Users can insert their own family tree"
-  ON family_trees FOR INSERT
-  WITH CHECK (auth.uid() = user_id);
-
-CREATE POLICY "Users can update their own family tree"
-  ON family_trees FOR UPDATE
-  USING (auth.uid() = user_id);
-
-CREATE POLICY "Users can delete their own family tree"
-  ON family_trees FOR DELETE
-  USING (auth.uid() = user_id);
-```
+If you already created the old `family_trees` table from a prior README, you can keep it; the app migrates that JSON into the relational tables on first load when the new tables are empty.
 
 ### 4. Configure environment variables
 
@@ -101,7 +74,7 @@ src/
 ├── context/         # React contexts (Auth)
 ├── theme/           # Theme configurations
 ├── utils/           # Helper functions
-├── data/            # Data management
+├── data/            # Supabase sync (`familyData.js`)
 └── App.jsx          # Main app component
 ```
 

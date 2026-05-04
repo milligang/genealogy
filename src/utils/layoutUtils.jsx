@@ -1,7 +1,16 @@
 import dagre from 'dagre';
 
-const nodeWidth = 220;
-const nodeHeight = 100;
+const PERSON_W = 220;
+const PERSON_H = 100;
+const UNION_W = 36;
+const UNION_H = 28;
+
+function getDagreSize(node) {
+  if (node.type === 'unionNode') {
+    return { width: UNION_W, height: UNION_H };
+  }
+  return { width: PERSON_W, height: PERSON_H };
+}
 
 // Add this helper to trigger layout on connection changes
 export const autoLayoutOnConnect = (nodes, edges, setNodes, setEdges) => {
@@ -22,9 +31,9 @@ export const getLayoutedElements = (nodes, edges) => {
     edgesep: 50,
   });
 
-  // Add nodes to dagre
   nodes.forEach((node) => {
-    dagreGraph.setNode(node.id, { width: nodeWidth, height: nodeHeight });
+    const { width, height } = getDagreSize(node);
+    dagreGraph.setNode(node.id, { width, height });
   });
 
   // Add edges to dagre
@@ -38,12 +47,12 @@ export const getLayoutedElements = (nodes, edges) => {
   // Apply new positions to nodes
   const layoutedNodes = nodes.map((node) => {
     const nodeWithPosition = dagreGraph.node(node.id);
-    
+    const { width, height } = getDagreSize(node);
     return {
       ...node,
       position: {
-        x: nodeWithPosition.x - nodeWidth / 2,
-        y: nodeWithPosition.y - nodeHeight / 2,
+        x: nodeWithPosition.x - width / 2,
+        y: nodeWithPosition.y - height / 2,
       },
     };
   });
@@ -63,7 +72,8 @@ export const getLayoutedElementsLR = (nodes, edges) => {
   });
 
   nodes.forEach((node) => {
-    dagreGraph.setNode(node.id, { width: nodeWidth, height: nodeHeight });
+    const { width, height } = getDagreSize(node);
+    dagreGraph.setNode(node.id, { width, height });
   });
 
   edges.forEach((edge) => {
@@ -74,12 +84,12 @@ export const getLayoutedElementsLR = (nodes, edges) => {
 
   const layoutedNodes = nodes.map((node) => {
     const nodeWithPosition = dagreGraph.node(node.id);
-    
+    const { width, height } = getDagreSize(node);
     return {
       ...node,
       position: {
-        x: nodeWithPosition.x - nodeWidth / 2,
-        y: nodeWithPosition.y - nodeHeight / 2,
+        x: nodeWithPosition.x - width / 2,
+        y: nodeWithPosition.y - height / 2,
       },
     };
   });

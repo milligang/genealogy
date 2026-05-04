@@ -28,10 +28,8 @@ export const EditPanel = ({
   onClose,
   onSave,
   onDelete,
-  nodes,
-  edges,
-  onUpdateConnections,
-  currentTheme,
+  familyModel,
+  onUpdateModel,
 }) => {
   const theme = useTheme();
   const colors = theme.palette.mode === 'dark' ? darkColors : vintageColors;
@@ -44,9 +42,12 @@ export const EditPanel = ({
       ? { bg: '#6b3a3a', hover: '#7d4444', text: '#e8c4c4' }
       : { bg: '#8b5c52', hover: '#7a4f47', text: '#fff' };
 
+  // Reset form when a different person is selected
   useEffect(() => {
+    /* eslint-disable react-hooks/set-state-in-effect -- sync local editor state to props */
     setFormData(selectedNode.data || {});
     setTabValue(0);
+    /* eslint-enable react-hooks/set-state-in-effect */
   }, [selectedNode]);
 
   const handleChange = (key, value) => {
@@ -222,10 +223,8 @@ export const EditPanel = ({
         {tabValue === 1 && (
           <ConnectionsTab
             currentNodeId={selectedNode.id}
-            nodes={nodes}
-            edges={edges}
-            onUpdateConnections={onUpdateConnections}
-            currentTheme={currentTheme}
+            familyModel={familyModel}
+            onUpdateModel={onUpdateModel}
           />
         )}
       </Box>

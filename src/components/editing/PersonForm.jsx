@@ -20,7 +20,7 @@ import { Close, CameraAlt } from '@mui/icons-material';
 import { FlexibleDatePicker } from '../../utils/datePicker';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
-import { loadFamilyData } from '../../data/people';
+import { loadFamilyData } from '../../data/familyData';
 import optimizeImage from '../../utils/imageOptimization';
 
 const EMPTY_FORM = {
@@ -35,7 +35,14 @@ const EMPTY_FORM = {
   notes: '',
 };
 
-export const PersonForm = ({ open, onClose, onSave, initialData, initialConnections = [] }) => {
+export const PersonForm = ({
+  open,
+  onClose,
+  onSave,
+  initialData,
+  initialConnections = [],
+  availablePeople,
+}) => {
   const [formData, setFormData] = useState(EMPTY_FORM);
   const [connections, setConnections] = useState([]);
   const [selectedPerson, setSelectedPerson] = useState('');
@@ -45,19 +52,30 @@ export const PersonForm = ({ open, onClose, onSave, initialData, initialConnecti
   // Reset form and seed any pre-wired connections whenever the dialog opens
   useEffect(() => {
     if (open) {
+      /* eslint-disable react-hooks/set-state-in-effect -- dialog open resets draft state */
       setFormData(initialData ? { ...EMPTY_FORM, ...initialData } : EMPTY_FORM);
       setConnections([]);
       setSelectedPerson('');
       setConnectionType('child');
+      /* eslint-enable react-hooks/set-state-in-effect */
 
-      // Load available nodes (loadFamilyData may be async or sync — handle both)
       const load = async () => {
         try {
-          const familyData = await Promise.resolve(loadFamilyData());
-          const nodes = familyData?.nodes || [];
+          let nodes;
+          if (Array.isArray(availablePeople)) {
+            nodes = availablePeople.map((p) => ({
+              id: p.id,
+              data: { goesBy: p.label, firstName: p.label },
+            }));
+          } else {
+            const model = await Promise.resolve(loadFamilyData());
+            nodes = Object.values(model.people || {}).map((p) => ({
+              id: p.id,
+              data: { ...p },
+            }));
+          }
           setAvailableNodes(nodes);
 
-          // Seed pre-wired connections from plus button (e.g. "add child of X")
           if (initialConnections.length > 0) {
             const seeded = initialConnections
               .map((conn) => {
@@ -79,7 +97,7 @@ export const PersonForm = ({ open, onClose, onSave, initialData, initialConnecti
       };
       load();
     }
-  }, [open]);
+  }, [open, availablePeople, initialConnections, initialData]);
 
   const handlePhotoUpload = async (e) => {
     const file = e.target.files[0];

@@ -1,16 +1,16 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import ReactFlow, {
   MiniMap,
   Controls,
   Background,
   useNodesState,
   useEdgesState,
-  addEdge,
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 import { Box } from '@mui/material';
 
 import { PersonNode } from '../nodes/PersonNode';
+import { UnionNode } from '../nodes/UnionNode';
 import { PersonForm } from '../editing/PersonForm';
 import { EditPanel } from '../editing/EditPanel';
 import { Sidebar } from '../layout/Sidebar';
@@ -23,25 +23,34 @@ import { FeedbackDialog } from '../dialogs/FeedbackDialog';
 import {
   loadFamilyData,
   saveFamilyData,
-  initialFamilyData,
+  createSeedFamilyModel,
   clearFamilyData,
-} from '../../data/people';
+} from '../../data/familyData';
 import { getLayoutedElements } from '../../utils/layoutUtils';
 import getThemeConfig from '../../theme';
 import { initPlusUtil, handleAddPerson } from '../../utils/handleAddPerson';
-import { createEdgesFromConnections, createNodeFromFormData } from '../../utils/appHelpers';
+import { createPersonFromFormData } from '../../utils/appHelpers';
 import { useModalBlur } from '../../hooks/useModalBlur';
+import { buildReactFlowGraph } from '../../domain/buildReactFlowGraph';
+import {
+  addPerson,
+  applyConnectionsForNewPerson,
+  connectSpouses,
+  linkChildToParent,
+  deletePerson,
+} from '../../domain/familyMutations';
 
-const nodeTypes = { personNode: PersonNode };
+const nodeTypes = { personNode: PersonNode, unionNode: UnionNode };
 const edgeTypes = { spouse: SpouseEdge };
 
 export const FamilyTree = ({ currentTheme, onThemeToggle }) => {
   const themeConfig = getThemeConfig(currentTheme);
   const openModal = useModalBlur();
 
+  const [familyModel, setFamilyModel] = useState(() => createSeedFamilyModel());
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
-  const [selectedNode, setSelectedNode] = useState(null);
+  const [selectedId, setSelectedId] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
   const [isDraggingSpouse, setIsDraggingSpouse] = useState(false);
@@ -57,57 +66,75 @@ export const FamilyTree = ({ currentTheme, onThemeToggle }) => {
 
   const handleAddPersonRef = useRef(null);
 
+  const selectedNode = useMemo(
+    () => nodes.find((n) => n.id === selectedId && n.type === 'personNode') ?? null,
+    [nodes, selectedId],
+  );
+
+  const availablePeople = useMemo(
+    () =>
+      Object.values(familyModel.people).map((p) => ({
+        id: p.id,
+        label: p.goesBy || p.firstName || 'Unnamed',
+      })),
+    [familyModel.people],
+  );
+
   useEffect(() => {
     initPlusUtil((open, payload) => setAddPersonState({ open, ...payload }));
   }, []);
 
-  const handleNodeClick = useCallback((nodeId) => {
-    setNodes((currentNodes) => {
-      const live = currentNodes.find((n) => n.id === nodeId);
-      if (live) {
-        openModal(() => setSelectedNode(live));
-      }
-      return currentNodes;
-    });
-  }, [openModal]);
-
-  const attachNodeCallbacks = useCallback(
-    (node) => ({
-      ...node,
-      data: {
-        ...node.data,
-        onClick: () => handleNodeClick(node.id),
-        addPersonCallback: (connections) => {
-          openModal(() =>
-            setAddPersonState({ open: true, data: null, connections, onAddPerson: null })
-          );
-        },
-      },
-    }),
-    [handleNodeClick, openModal]
+  const handleNodeClick = useCallback(
+    (nodeId) => {
+      setNodes((currentNodes) => {
+        const live = currentNodes.find((n) => n.id === nodeId);
+        if (live?.type === 'personNode') {
+          openModal(() => setSelectedId(nodeId));
+        }
+        return currentNodes;
+      });
+    },
+    [openModal, setNodes],
   );
 
+  const attachNodeCallbacks = useCallback(
+    (node) => {
+      if (node.type === 'unionNode') return node;
+      return {
+        ...node,
+        data: {
+          ...node.data,
+          onClick: () => handleNodeClick(node.id),
+          addPersonCallback: (connections) => {
+            openModal(() =>
+              setAddPersonState({ open: true, data: null, connections, onAddPerson: null }),
+            );
+          },
+        },
+      };
+    },
+    [handleNodeClick, openModal],
+  );
+
+  const rebuildFlow = useCallback(() => {
+    const { nodes: rawNodes, edges: rawEdges } = buildReactFlowGraph(familyModel, themeConfig);
+    const { nodes: layoutedNodes, edges: layoutedEdges } = getLayoutedElements(rawNodes, rawEdges);
+    setNodes(layoutedNodes.map(attachNodeCallbacks));
+    setEdges(layoutedEdges);
+  }, [familyModel, themeConfig, attachNodeCallbacks, setNodes, setEdges]);
+
   useEffect(() => {
-    setNodes((nds) => nds.map(attachNodeCallbacks));
-  }, [attachNodeCallbacks]);
+    rebuildFlow();
+  }, [rebuildFlow]);
 
   useEffect(() => {
     const loadData = async () => {
       try {
-        const savedData = await loadFamilyData();
-        const sourceNodes = Array.isArray(savedData.nodes)
-          ? savedData.nodes
-          : initialFamilyData.nodes;
-        const safeEdges = Array.isArray(savedData.edges)
-          ? savedData.edges
-          : initialFamilyData.edges;
-
-        setNodes(sourceNodes.map(attachNodeCallbacks));
-        setEdges(safeEdges);
+        const model = await loadFamilyData();
+        setFamilyModel(model);
       } catch (err) {
         console.error('Failed to load family data:', err);
-        setNodes(initialFamilyData.nodes.map(attachNodeCallbacks));
-        setEdges(initialFamilyData.edges);
+        setFamilyModel(createSeedFamilyModel());
       } finally {
         setIsLoading(false);
         setHasLoadedOnce(true);
@@ -119,41 +146,37 @@ export const FamilyTree = ({ currentTheme, onThemeToggle }) => {
   useEffect(() => {
     if (!isLoading && hasLoadedOnce) {
       try {
-        saveFamilyData(nodes, edges);
+        saveFamilyData(familyModel);
       } catch (err) {
         console.error('Failed to save family data:', err);
       }
     }
-  }, [nodes, edges, isLoading, hasLoadedOnce]);
+  }, [familyModel, isLoading, hasLoadedOnce]);
+
+  const updateModel = useCallback((fn) => {
+    setFamilyModel((m) => fn(m));
+  }, []);
 
   const handleAddPersonLocal = useCallback(
     ({ formData, connections = [] }) => {
-      const baseNode = createNodeFromFormData(formData);
-      const newNode = attachNodeCallbacks({
-        ...baseNode,
-        data: { ...baseNode.data, ...formData },
+      const person = createPersonFromFormData(formData);
+      setFamilyModel((m) => {
+        let next = addPerson(m, person);
+        next = applyConnectionsForNewPerson(next, person.id, connections);
+        return next;
       });
-
-      const newEdges = connections.length
-        ? createEdgesFromConnections(newNode.id, connections, themeConfig)
-        : [];
-
-      setNodes((nds) => [...nds, newNode]);
-      setEdges((eds) => [...eds, ...newEdges]);
       setAddPersonState({ open: false, data: null, connections: [], onAddPerson: null });
     },
-    [attachNodeCallbacks, themeConfig]
+    [],
   );
 
   handleAddPersonRef.current = handleAddPersonLocal;
 
-  const handleDeleteNode = (nodeId) => {
-    setNodes((nds) => nds.filter((n) => n.id !== nodeId));
-    setEdges((eds) => eds.filter((e) => e.source !== nodeId && e.target !== nodeId));
-    setSelectedNode(null);
-  };
+  const handleDeletePerson = useCallback((personId) => {
+    setFamilyModel((m) => deletePerson(m, personId));
+    setSelectedId(null);
+  }, []);
 
-  // Set spouse drag state based on which handle the drag originated from
   const onConnectStart = useCallback((_, { handleId }) => {
     setIsDraggingSpouse(handleId?.startsWith('spouse') ?? false);
   }, []);
@@ -162,10 +185,10 @@ export const FamilyTree = ({ currentTheme, onThemeToggle }) => {
     setIsDraggingSpouse(false);
   }, []);
 
-  // All nodes are valid targets — edge type is determined solely by the source handle.
-  // Only block self-connections.
   const isValidConnection = useCallback((connection) => {
-    return connection.source !== connection.target;
+    if (connection.source === connection.target) return false;
+    const tid = String(connection.target || '');
+    return !tid.startsWith('union:');
   }, []);
 
   const onConnect = useCallback(
@@ -173,67 +196,39 @@ export const FamilyTree = ({ currentTheme, onThemeToggle }) => {
       const isSpouse = params.sourceHandle?.startsWith('spouse');
       const isParent = params.sourceHandle === 'parent-source';
 
-      let edgeConfig, dataType, finalParams;
-
       if (isSpouse) {
-        // spouse-left/right → connect to the opposite spouse handle on target
-        edgeConfig = themeConfig.edgeStyles.spouse;
-        dataType = 'spouse';
-        const targetHandle = params.sourceHandle === 'spouse-left' ? 'spouse-right' : 'spouse-left';
-        finalParams = { ...params, targetHandle };
+        const a = params.source;
+        const b = params.target;
+        setFamilyModel((m) => connectSpouses(m, a, b));
       } else if (isParent) {
-        // top (parent-source)
-        // source node is the child, target node is the parent.
-        // Edge flows parent→child so flip source/target, connect bottom→top.
-        edgeConfig = themeConfig.edgeStyles.parentChild;
-        dataType = 'parent-child';
-        finalParams = {
-          ...params,
-          source: params.target,
-          target: params.source,
-          sourceHandle: 'child-source',
-          targetHandle: 'parent-source',
-        };
+        const parentId = params.target;
+        const childId = params.source;
+        setFamilyModel((m) => linkChildToParent(m, childId, parentId));
       } else {
-        // bottom (child-source)
-        // source node is the parent, target node is the child.
-        edgeConfig = themeConfig.edgeStyles.parentChild;
-        dataType = 'parent-child';
-        finalParams = {
-          ...params,
-          sourceHandle: 'child-source',
-          targetHandle: 'parent-source',
-        };
+        const parentId = params.source;
+        const childId = params.target;
+        setFamilyModel((m) => linkChildToParent(m, childId, parentId));
       }
-
-      setEdges((eds) =>
-        addEdge({ ...finalParams, ...edgeConfig, data: { type: dataType } }, eds)
-      );
       setIsDraggingSpouse(false);
     },
-    [setEdges, themeConfig.edgeStyles]
+    [],
   );
 
   const handleReset = async () => {
     if (window.confirm('Are you sure you want to reset all data? This cannot be undone.')) {
       await clearFamilyData();
-      setNodes(initialFamilyData.nodes.map(attachNodeCallbacks));
-      setEdges(initialFamilyData.edges);
-      setSelectedNode(null);
+      setFamilyModel(createSeedFamilyModel());
+      setSelectedId(null);
     }
   };
 
   const handleAutoLayout = () => {
-    const { nodes: layoutedNodes, edges: layoutedEdges } = getLayoutedElements(nodes, edges);
-    setNodes(layoutedNodes);
-    setEdges(layoutedEdges);
+    rebuildFlow();
   };
 
-  const handleImport = (newNodes, newEdges) => {
-    const nodesWithCallbacks = newNodes.map(attachNodeCallbacks);
-    setNodes(nodesWithCallbacks);
-    setEdges(newEdges);
-    saveFamilyData(nodesWithCallbacks, newEdges);
+  const handleImport = (model) => {
+    setFamilyModel(model);
+    saveFamilyData(model);
   };
 
   return (
@@ -243,13 +238,12 @@ export const FamilyTree = ({ currentTheme, onThemeToggle }) => {
           openModal(() =>
             handleAddPerson({
               onAddPerson: (...args) => handleAddPersonRef.current?.(...args),
-            })
+            }),
           )
         }
         onAutoLayout={handleAutoLayout}
         onReset={handleReset}
-        nodes={nodes}
-        edges={edges}
+        familyModel={familyModel}
         onImport={handleImport}
         currentTheme={currentTheme}
         onThemeToggle={onThemeToggle}
@@ -285,20 +279,19 @@ export const FamilyTree = ({ currentTheme, onThemeToggle }) => {
       {selectedNode && (
         <EditPanel
           selectedNode={selectedNode}
-          onClose={() => setSelectedNode(null)}
-          onSave={(updatedNode) =>
-            setNodes((nds) =>
-              nds.map((n) =>
-                n.id === updatedNode.id
-                  ? attachNodeCallbacks({ ...n, data: updatedNode.data })
-                  : n
-              )
-            )
-          }
-          onDelete={handleDeleteNode}
-          nodes={nodes}
-          edges={edges}
-          onUpdateConnections={(newEdges) => setEdges(newEdges)}
+          onClose={() => setSelectedId(null)}
+          onSave={(updatedNode) => {
+            setFamilyModel((m) => ({
+              ...m,
+              people: {
+                ...m.people,
+                [updatedNode.id]: { ...m.people[updatedNode.id], ...updatedNode.data, id: updatedNode.id },
+              },
+            }));
+          }}
+          onDelete={handleDeletePerson}
+          familyModel={familyModel}
+          onUpdateModel={updateModel}
         />
       )}
 
@@ -306,6 +299,7 @@ export const FamilyTree = ({ currentTheme, onThemeToggle }) => {
         open={addPersonState.open}
         initialData={addPersonState.data}
         initialConnections={addPersonState.connections ?? []}
+        availablePeople={availablePeople}
         onClose={() =>
           setAddPersonState({ open: false, data: null, connections: [], onAddPerson: null })
         }
