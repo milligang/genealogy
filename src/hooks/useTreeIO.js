@@ -1,4 +1,4 @@
-import { parseFamilyImport } from '../data/familyData';
+import { parseFamilyImport } from '../data/parseFamilyImport';
 
 export const useTreeIO = (familyModel, onImport) => {
   const exportTree = () => {

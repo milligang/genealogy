@@ -44,10 +44,8 @@ export const EditPanel = ({
 
   // Reset form when a different person is selected
   useEffect(() => {
-    /* eslint-disable react-hooks/set-state-in-effect -- sync local editor state to props */
     setFormData(selectedNode.data || {});
     setTabValue(0);
-    /* eslint-enable react-hooks/set-state-in-effect */
   }, [selectedNode]);
 
   const handleChange = (key, value) => {

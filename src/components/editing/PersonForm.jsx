@@ -54,12 +54,10 @@ export const PersonForm = ({
   // Reset form and seed any pre-wired connections whenever the dialog opens
   useEffect(() => {
     if (open) {
-      /* eslint-disable react-hooks/set-state-in-effect -- dialog open resets draft state */
       setFormData(initialData ? { ...EMPTY_FORM, ...initialData } : EMPTY_FORM);
       setConnections([]);
       setSelectedPerson('');
       setConnectionType('child');
-      /* eslint-enable react-hooks/set-state-in-effect */
 
       const load = async () => {
         try {
