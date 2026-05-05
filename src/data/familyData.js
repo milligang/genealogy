@@ -68,7 +68,8 @@ function personToRow(userId, person) {
 }
 
 function rowToPerson(row) {
-  return { id: row.id, ...(row.profile || {}) };
+  const id = row?.id != null ? String(row.id) : '';
+  return { ...(row.profile || {}), id };
 }
 
 async function replaceUserFamilyRemote(userId, model) {
@@ -135,25 +136,32 @@ async function loadRelationalFamily(userId) {
 
   if (!people?.length && !unions?.length) return null;
 
-  const unionIds = new Set((unions || []).map((u) => u.id));
+  const unionIds = new Set(
+    (unions || []).map((u) => (u?.id != null ? String(u.id) : '')).filter(Boolean),
+  );
   const model = createEmptyFamilyModel();
   for (const row of people || []) {
-    model.people[row.id] = rowToPerson(row);
+    const id = row?.id != null ? String(row.id) : '';
+    if (!id) continue;
+    model.people[id] = rowToPerson(row);
   }
   for (const row of unions || []) {
-    model.unions[row.id] = { id: row.id, label: row.label };
+    const id = row?.id != null ? String(row.id) : '';
+    if (!id) continue;
+    model.unions[id] = { id, label: row.label };
   }
   for (const row of spouses || []) {
-    if (unionIds.has(row.union_id)) {
-      model.unionSpouses.push({
-        unionId: row.union_id,
-        personId: row.person_id,
-      });
+    const unionId = row?.union_id != null ? String(row.union_id) : '';
+    const personId = row?.person_id != null ? String(row.person_id) : '';
+    if (unionIds.has(unionId)) {
+      model.unionSpouses.push({ unionId, personId });
     }
   }
   for (const row of children || []) {
-    if (unionIds.has(row.union_id)) {
-      model.unionChildren.push({ unionId: row.union_id, childPersonId: row.child_person_id });
+    const unionId = row?.union_id != null ? String(row.union_id) : '';
+    const childPersonId = row?.child_person_id != null ? String(row.child_person_id) : '';
+    if (unionIds.has(unionId)) {
+      model.unionChildren.push({ unionId, childPersonId });
     }
   }
   return repairFamilyModel(model);

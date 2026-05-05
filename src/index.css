@@ -24,9 +24,14 @@ a:hover {
 
 body {
   margin: 0;
-  display: flex;
-  place-items: center;
   min-width: 320px;
+  min-height: 100vh;
+}
+
+/* Full-width app shell — avoid Vite template flex centering on body, which shrink-wraps
+   #root and can leave React Flow’s pane at 0×0 (nodes/edges exist but nothing draws). */
+#root {
+  width: 100%;
   min-height: 100vh;
 }
 

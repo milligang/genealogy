@@ -5,6 +5,7 @@ import ReactFlow, {
   Background,
   useNodesState,
   useEdgesState,
+  useReactFlow,
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 import { useNavigate } from 'react-router-dom';
@@ -53,11 +54,34 @@ const edgeTypes = { spouse: SpouseEdge };
 
 const DRAFT_DEBOUNCE_MS = 500;
 
+/** Runs inside `<ReactFlow>` so `fitView` targets a sized viewport after load/layout. */
+function FitViewAfterLoadPulse({ pulse }) {
+  const { fitView } = useReactFlow();
+  useEffect(() => {
+    if (!pulse) return undefined;
+    let cancelled = false;
+    const run = () => {
+      if (cancelled) return;
+      fitView({ padding: 0.15, duration: 0 });
+    };
+    const id = window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(run);
+    });
+    return () => {
+      cancelled = true;
+      window.cancelAnimationFrame(id);
+    };
+  }, [pulse, fitView]);
+  return null;
+}
+
 /** Matches initial `familyModel` state so first dirty check is not true against ref ''. */
 const INITIAL_SEED_SNAPSHOT = serializeFamilyModel(createSeedFamilyModel());
 
 export const FamilyTree = ({ currentTheme, onThemeToggle, isGuest = false }) => {
-  const themeConfig = getThemeConfig(currentTheme);
+  // Must be stable across renders: syncGraphFromModel depends on it; a fresh object each render
+  // retriggered sync every frame (setNodes/setEdges), causing shake, high CPU, and a broken viewport.
+  const themeConfig = useMemo(() => getThemeConfig(currentTheme), [currentTheme]);
   const openModal = useModalBlur();
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -72,6 +96,8 @@ export const FamilyTree = ({ currentTheme, onThemeToggle, isGuest = false }) => 
   const [saveCooldownUntil, setSaveCooldownUntil] = useState(0);
   const [cooldownClock, setCooldownClock] = useState(0);
   const [toast, setToast] = useState(null);
+  /** Incremented when loading finishes so in-canvas `fitView` runs after the pane has real dimensions. */
+  const [fitViewPulse, setFitViewPulse] = useState(0);
 
   const [addPersonState, setAddPersonState] = useState({
     open: false,
@@ -87,6 +113,9 @@ export const FamilyTree = ({ currentTheme, onThemeToggle, isGuest = false }) => 
   const pendingPositionsRef = useRef(null);
   const draftPositionsAppliedRef = useRef(false);
   const draftDebounceRef = useRef(null);
+  /** After load transition (isLoading true→false), run one `fitView` once nodes exist. */
+  const pendingInitialFitRef = useRef(false);
+  const wasLoadingRef = useRef(true);
 
   const selectedNode = useMemo(
     () => nodes.find((n) => n.id === selectedId && n.type === 'personNode') ?? null,
@@ -250,6 +279,26 @@ export const FamilyTree = ({ currentTheme, onThemeToggle, isGuest = false }) => 
   useEffect(() => {
     syncGraphFromModel();
   }, [syncGraphFromModel]);
+
+  useEffect(() => {
+    if (wasLoadingRef.current && !isLoading) {
+      pendingInitialFitRef.current = true;
+    }
+    wasLoadingRef.current = isLoading;
+  }, [isLoading]);
+
+  useEffect(() => {
+    if (!pendingInitialFitRef.current || isLoading || nodes.length === 0) return undefined;
+    pendingInitialFitRef.current = false;
+    let raf1;
+    const raf0 = window.requestAnimationFrame(() => {
+      raf1 = window.requestAnimationFrame(() => setFitViewPulse((p) => p + 1));
+    });
+    return () => {
+      window.cancelAnimationFrame(raf0);
+      if (raf1 != null) window.cancelAnimationFrame(raf1);
+    };
+  }, [isLoading, nodes.length]);
 
   useEffect(() => {
     if (isGuest) {
@@ -565,7 +614,19 @@ export const FamilyTree = ({ currentTheme, onThemeToggle, isGuest = false }) => 
         onOpenComingSoon={() => openModal(() => setComingSoonOpen(true))}
       />
 
-      <Box sx={{ flex: 1, position: 'relative' }}>
+      <Box
+        sx={{
+          flex: 1,
+          position: 'relative',
+          minWidth: 0,
+          minHeight: 0,
+          height: '100%',
+          '& .react-flow': {
+            width: '100%',
+            height: '100%',
+          },
+        }}
+      >
         <ReactFlow
           nodes={nodes}
           edges={edges}
@@ -576,8 +637,8 @@ export const FamilyTree = ({ currentTheme, onThemeToggle, isGuest = false }) => 
           nodesDraggable
           nodesConnectable={false}
           deleteKeyCode={null}
-          fitView
         >
+          <FitViewAfterLoadPulse pulse={fitViewPulse} />
           <Controls />
           <MiniMap />
           <Background {...themeConfig.flowBackgroundConfig} />
