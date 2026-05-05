@@ -81,10 +81,9 @@ export const createEdgeStyles = (colors = {}) => ({
     animated: false,
   },
   spouse: {
-    // 'spouse' maps to the custom SpouseEdge component registered in edgeTypes
-    type: 'spouse',
+    type: 'smoothstep',
     style: {
-      stroke: colors.edgeSpouse || '#9d5c8f',
+      stroke: colors.edgeParentChild || '#8b7355',
       strokeWidth: 2,
     },
     animated: false,

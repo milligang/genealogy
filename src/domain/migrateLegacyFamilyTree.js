@@ -1,6 +1,6 @@
 import dayjs from 'dayjs';
 import { createEmptyFamilyModel } from './familyModel';
-import { addPerson, connectSpouses, linkChildToParent } from './familyMutations';
+import { addPerson, connectSpouses, linkChildToParent, mergeUnionInto } from './familyMutations';
 import { repairFamilyModel } from './repairFamilyModel';
 
 function isSpouseEdge(edge) {
@@ -81,46 +81,6 @@ export function finalizeSoloParentUnions(model) {
       m = mergeUnionInto(m, drop, keep);
     }
   }
-  return m;
-}
-
-function mergeUnionInto(model, fromUnionId, intoUnionId) {
-  const m = {
-    people: { ...model.people },
-    unions: { ...model.unions },
-    unionSpouses: model.unionSpouses.map((r) => ({ ...r })),
-    unionChildren: model.unionChildren.map((r) => ({ ...r })),
-  };
-
-  for (const row of m.unionSpouses) {
-    if (row.unionId === fromUnionId) row.unionId = intoUnionId;
-  }
-  for (const row of m.unionChildren) {
-    if (row.unionId === fromUnionId) row.unionId = intoUnionId;
-  }
-
-  delete m.unions[fromUnionId];
-
-  const dedupeChildren = [];
-  const seen = new Set();
-  for (const c of m.unionChildren) {
-    const k = `${c.unionId}:${c.childPersonId}`;
-    if (seen.has(k)) continue;
-    seen.add(k);
-    dedupeChildren.push(c);
-  }
-  m.unionChildren = dedupeChildren;
-
-  const dedupeSpouses = [];
-  seen.clear();
-  for (const s of m.unionSpouses) {
-    const k = `${s.unionId}:${s.personId}`;
-    if (seen.has(k)) continue;
-    seen.add(k);
-    dedupeSpouses.push(s);
-  }
-  m.unionSpouses = dedupeSpouses;
-
   return m;
 }
 

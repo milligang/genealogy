@@ -76,7 +76,7 @@ export const darkTheme = createTheme({
 export const darkColors = {
   nodeHandle: '#667eea',
   edgeParentChild: '#667eea',
-  edgeSpouse: '#c084fc',   // purple — distinct from blue parent/child
+  edgeSpouse: '#667eea',
   background: '#1a202c',
   backgroundDots: '#4a5568',
   gender: {

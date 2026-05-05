@@ -30,6 +30,31 @@ describe('repairFamilyModel', () => {
       unionChildren: [],
     });
     expect(m.unions.orphan).toBeUndefined();
+    expect(m.unions.u).toBeUndefined();
+    expect(m.unionSpouses).toEqual([]);
+  });
+
+  it('keeps a couple union with no children (two spouses)', () => {
+    const m = repairFamilyModel({
+      people: { a: { id: 'a' }, b: { id: 'b' } },
+      unions: { u: { id: 'u' } },
+      unionSpouses: [
+        { unionId: 'u', personId: 'a' },
+        { unionId: 'u', personId: 'b' },
+      ],
+      unionChildren: [],
+    });
+    expect(m.unions.u).toBeDefined();
+    expect(m.unionSpouses).toHaveLength(2);
+  });
+
+  it('keeps solo parent union when there are children', () => {
+    const m = repairFamilyModel({
+      people: { a: { id: 'a' }, c: { id: 'c' } },
+      unions: { u: { id: 'u' } },
+      unionSpouses: [{ unionId: 'u', personId: 'a' }],
+      unionChildren: [{ unionId: 'u', childPersonId: 'c' }],
+    });
     expect(m.unions.u).toBeDefined();
   });
 

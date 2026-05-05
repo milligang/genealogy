@@ -78,7 +78,7 @@ export const vintageTheme = createTheme({
 export const vintageColors = {
   nodeHandle: '#8b7355',
   edgeParentChild: '#8b7355',
-  edgeSpouse: '#9d5c8f',
+  edgeSpouse: '#8b7355',
   background: '#f4e4c1',
   backgroundDots: '#d4a574',
   gender: {

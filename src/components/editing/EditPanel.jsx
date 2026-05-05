@@ -30,6 +30,7 @@ export const EditPanel = ({
   onDelete,
   familyModel,
   onUpdateModel,
+  onOpenAddConnectedPerson,
 }) => {
   const theme = useTheme();
   const colors = theme.palette.mode === 'dark' ? darkColors : vintageColors;
@@ -223,6 +224,7 @@ export const EditPanel = ({
             currentNodeId={selectedNode.id}
             familyModel={familyModel}
             onUpdateModel={onUpdateModel}
+            onOpenAddConnectedPerson={onOpenAddConnectedPerson}
           />
         )}
       </Box>

@@ -63,6 +63,23 @@ export function repairFamilyModel(input) {
     return true;
   });
 
+  /** Drop unions that are not a real family row in the UI (e.g. one spouse left, no children). */
+  const degenerateUnionIds = new Set();
+  for (const uid of Object.keys(unions)) {
+    const spouseCount = unionSpouses.filter((s) => s.unionId === uid).length;
+    const childCount = unionChildren.filter((c) => c.unionId === uid).length;
+    if (spouseCount === 0 && childCount === 0) {
+      degenerateUnionIds.add(uid);
+    } else if (spouseCount === 1 && childCount === 0) {
+      degenerateUnionIds.add(uid);
+    }
+  }
+  for (const uid of degenerateUnionIds) {
+    delete unions[uid];
+  }
+  unionSpouses = unionSpouses.filter((s) => !degenerateUnionIds.has(s.unionId));
+  unionChildren = unionChildren.filter((c) => !degenerateUnionIds.has(c.unionId));
+
   const referencedUnionIds = new Set([
     ...unionSpouses.map((s) => s.unionId),
     ...unionChildren.map((c) => c.unionId),

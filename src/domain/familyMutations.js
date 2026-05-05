@@ -1,4 +1,5 @@
 import { cloneFamilyModel } from './familyModel';
+import { repairFamilyModel } from './repairFamilyModel';
 
 function newId() {
   return crypto.randomUUID();
@@ -13,6 +14,64 @@ function omitUnion(model, unionId) {
     unionSpouses: model.unionSpouses.filter((s) => s.unionId !== unionId),
     unionChildren: model.unionChildren.filter((c) => c.unionId !== unionId),
   };
+}
+
+function dedupeUnionJunctions(model) {
+  const seenS = new Set();
+  const unionSpouses = [];
+  for (const s of model.unionSpouses) {
+    const k = `${s.unionId}:${s.personId}`;
+    if (seenS.has(k)) continue;
+    seenS.add(k);
+    unionSpouses.push(s);
+  }
+  const seenC = new Set();
+  const unionChildren = [];
+  for (const c of model.unionChildren) {
+    const k = `${c.unionId}:${c.childPersonId}`;
+    if (seenC.has(k)) continue;
+    seenC.add(k);
+    unionChildren.push(c);
+  }
+  return { ...model, unionSpouses, unionChildren };
+}
+
+/**
+ * Move all spouse/child rows from `fromUnionId` into `intoUnionId`, drop the empty union, dedupe.
+ */
+export function mergeUnionInto(model, fromUnionId, intoUnionId) {
+  if (fromUnionId === intoUnionId) return model;
+  if (!model.unions[fromUnionId] || !model.unions[intoUnionId]) return model;
+
+  const m = {
+    people: { ...model.people },
+    unions: { ...model.unions },
+    unionSpouses: model.unionSpouses.map((r) => ({ ...r })),
+    unionChildren: model.unionChildren.map((r) => ({ ...r })),
+  };
+
+  for (const row of m.unionSpouses) {
+    if (row.unionId === fromUnionId) row.unionId = intoUnionId;
+  }
+  for (const row of m.unionChildren) {
+    if (row.unionId === fromUnionId) row.unionId = intoUnionId;
+  }
+
+  delete m.unions[fromUnionId];
+
+  return dedupeUnionJunctions(m);
+}
+
+/** Unions where `personId` is the only spouse (e.g. solo parent + children, or one-person union). */
+export function soleSpouseUnionIds(model, personId) {
+  const out = [];
+  for (const uid of Object.keys(model.unions)) {
+    const spouses = model.unionSpouses.filter((s) => s.unionId === uid);
+    if (spouses.length === 1 && spouses[0].personId === personId) {
+      out.push(uid);
+    }
+  }
+  return out;
 }
 
 export function findUnionContainingBoth(model, personAId, personBId) {
@@ -91,17 +150,46 @@ export function addPerson(model, person) {
   return m;
 }
 
-/** Marriage / partnership: new union with exactly these two spouses */
+/**
+ * Marriage / partnership with these two people.
+ * If either person already has a sole-spouse union (e.g. solo parent + children), absorbs the new
+ * partner into that union instead of creating a second parallel union — so later spouses share the
+ * same children row(s). If both have sole-spouse unions (each with kids), those unions are merged.
+ */
 export function connectSpouses(model, personAId, personBId) {
   if (personAId === personBId) return model;
   if (!model.people[personAId] || !model.people[personBId]) return model;
   if (findUnionContainingBoth(model, personAId, personBId)) return model;
 
-  const m = cloneFamilyModel(model);
-  const unionId = newId();
-  m.unions[unionId] = { id: unionId };
-  m.unionSpouses.push({ unionId, personId: personAId }, { unionId, personId: personBId });
-  return m;
+  const soloA = soleSpouseUnionIds(model, personAId);
+  const soloB = soleSpouseUnionIds(model, personBId);
+
+  if (soloA.length === 0 && soloB.length === 0) {
+    const m = cloneFamilyModel(model);
+    const unionId = newId();
+    m.unions[unionId] = { id: unionId };
+    m.unionSpouses.push({ unionId, personId: personAId }, { unionId, personId: personBId });
+    return m;
+  }
+
+  let m = cloneFamilyModel(model);
+  const targetUnionId = soloA[0] ?? soloB[0];
+  const mergeIds = new Set([...soloA, ...soloB]);
+  mergeIds.delete(targetUnionId);
+
+  for (const uid of mergeIds) {
+    m = mergeUnionInto(m, uid, targetUnionId);
+  }
+
+  const sp = new Set(spousesOfUnion(m, targetUnionId));
+  if (!sp.has(personAId)) {
+    m.unionSpouses.push({ unionId: targetUnionId, personId: personAId });
+  }
+  if (!sp.has(personBId)) {
+    m.unionSpouses.push({ unionId: targetUnionId, personId: personBId });
+  }
+
+  return dedupeUnionJunctions(m);
 }
 
 /**
@@ -143,9 +231,9 @@ export function removeSpousePartnership(model, personAId, personBId) {
   );
   const remainingSpouses = m.unionSpouses.filter((s) => s.unionId === unionId);
   if (remainingSpouses.length === 0) {
-    return omitUnion(m, unionId);
+    return repairFamilyModel(omitUnion(m, unionId));
   }
-  return m;
+  return repairFamilyModel(m);
 }
 
 export function unlinkParentFromChild(model, childId, parentId) {
@@ -158,9 +246,9 @@ export function unlinkParentFromChild(model, childId, parentId) {
   );
   const remaining = m.unionSpouses.filter((s) => s.unionId === birthUnion);
   if (remaining.length === 0) {
-    return omitUnion(m, birthUnion);
+    return repairFamilyModel(omitUnion(m, birthUnion));
   }
-  return m;
+  return repairFamilyModel(m);
 }
 
 /** Remove child from a union that includes `parentId` as a spouse (first match). */
@@ -177,7 +265,7 @@ export function unlinkChildFromUnion(model, parentId, childId) {
   m.unionChildren = m.unionChildren.filter(
     (c) => !(c.unionId === hit.unionId && c.childPersonId === childId),
   );
-  return m;
+  return repairFamilyModel(m);
 }
 
 export function deletePerson(model, personId) {
@@ -208,7 +296,7 @@ export function deletePerson(model, personId) {
       result = omitUnion(result, uid);
     }
   }
-  return result;
+  return repairFamilyModel(result);
 }
 
 /**

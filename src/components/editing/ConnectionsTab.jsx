@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Box,
   Typography,
@@ -25,11 +25,22 @@ import {
   listRelationsForPerson,
 } from '../../domain/familyMutations';
 
-export const ConnectionsTab = ({ currentNodeId, familyModel, onUpdateModel }) => {
+const NEW_PERSON_SELECT_VALUE = '__new_person__';
+
+export const ConnectionsTab = ({
+  currentNodeId,
+  familyModel,
+  onUpdateModel,
+  onOpenAddConnectedPerson,
+}) => {
   const [selectedPerson, setSelectedPerson] = useState('');
   const [connectionType, setConnectionType] = useState('child');
 
   const relations = currentNodeId ? listRelationsForPerson(familyModel, currentNodeId) : [];
+
+  useEffect(() => {
+    setSelectedPerson('');
+  }, [connectionType]);
 
   const getPersonDisplayName = (personId) => {
     const p = familyModel.people[personId];
@@ -60,6 +71,17 @@ export const ConnectionsTab = ({ currentNodeId, familyModel, onUpdateModel }) =>
 
   const handleAddConnection = () => {
     if (!selectedPerson || !currentNodeId) return;
+
+    if (selectedPerson === NEW_PERSON_SELECT_VALUE) {
+      if (typeof onOpenAddConnectedPerson === 'function') {
+        onOpenAddConnectedPerson({
+          anchorPersonId: currentNodeId,
+          connectionType,
+        });
+        setSelectedPerson('');
+      }
+      return;
+    }
 
     if (connectionType === 'spouse') {
       onUpdateModel((m) => connectSpouses(m, currentNodeId, selectedPerson));
@@ -106,7 +128,17 @@ export const ConnectionsTab = ({ currentNodeId, familyModel, onUpdateModel }) =>
             value={selectedPerson}
             onChange={(e) => setSelectedPerson(e.target.value)}
             label="Person"
+            MenuProps={{
+              PaperProps: { sx: { maxHeight: 320 } },
+            }}
           >
+            {typeof onOpenAddConnectedPerson === 'function' && (
+              <MenuItem value={NEW_PERSON_SELECT_VALUE}>
+                <Typography component="span" fontWeight={600}>
+                  Create new person…
+                </Typography>
+              </MenuItem>
+            )}
             {getAvailablePeople().map((id) => (
               <MenuItem key={id} value={id}>
                 {getPersonDisplayName(id)}
@@ -130,11 +162,14 @@ export const ConnectionsTab = ({ currentNodeId, familyModel, onUpdateModel }) =>
       <Button
         variant="outlined"
         onClick={handleAddConnection}
-        disabled={!selectedPerson}
+        disabled={
+          !selectedPerson ||
+          (selectedPerson === NEW_PERSON_SELECT_VALUE && typeof onOpenAddConnectedPerson !== 'function')
+        }
         fullWidth
         sx={{ mb: 3 }}
       >
-        Add Connection
+        {selectedPerson === NEW_PERSON_SELECT_VALUE ? 'Create person & connect' : 'Add Connection'}
       </Button>
 
       <Typography variant="subtitle2" mb={1}>

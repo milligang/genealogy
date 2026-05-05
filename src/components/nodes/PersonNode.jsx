@@ -1,7 +1,11 @@
-import React, { useState } from 'react';
-import { Paper, Box, Typography, Tooltip, useTheme } from '@mui/material';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { Paper, Box, Tooltip, useTheme } from '@mui/material';
 import { Handle, Position } from 'reactflow';
-import { PersonAdd, FamilyRestroom, Elderly } from '@mui/icons-material';
+import {
+  ArrowCircleDownOutlined,
+  ArrowCircleUpOutlined,
+  FavoriteBorder,
+} from '@mui/icons-material';
 import { vintageColors } from '../../theme/vintageTheme';
 import { darkColors } from '../../theme/darkTheme';
 import { nodeStyles } from '../../theme/sharedStyles';
@@ -21,14 +25,19 @@ const hiddenHandle = {
   opacity: 0,
 };
 
-function ActionButton({ icon, label, onClick }) {
+const TOOLBAR_HIDE_MS = 220;
+
+function ActionButton({ icon, title, onClick }) {
   return (
-    <Tooltip title={label} placement="top" arrow>
+    <Tooltip placement="top" arrow enterDelay={200} describeChild title={title}>
       <Box
+        component="button"
+        type="button"
+        aria-label={title}
         onClick={onClick}
         sx={{
-          width: 28,
-          height: 28,
+          width: 34,
+          height: 34,
           borderRadius: '50%',
           display: 'flex',
           alignItems: 'center',
@@ -39,12 +48,14 @@ function ActionButton({ icon, label, onClick }) {
           cursor: 'pointer',
           boxShadow: 1,
           color: 'text.secondary',
-          transition: 'all 0.15s',
+          transition: 'background-color 0.15s, border-color 0.15s, color 0.15s, box-shadow 0.15s, transform 0.15s',
+          p: 0,
+          font: 'inherit',
           '&:hover': {
             bgcolor: 'primary.main',
             borderColor: 'primary.main',
             color: 'primary.contrastText',
-            transform: 'scale(1.15)',
+            transform: 'scale(1.06)',
             boxShadow: 2,
           },
         }}
@@ -58,6 +69,29 @@ function ActionButton({ icon, label, onClick }) {
 export const PersonNode = ({ data, selected }) => {
   const theme = useTheme();
   const [hovered, setHovered] = useState(false);
+  const hideToolbarTimerRef = useRef(null);
+
+  const clearHideToolbar = useCallback(() => {
+    if (hideToolbarTimerRef.current != null) {
+      window.clearTimeout(hideToolbarTimerRef.current);
+      hideToolbarTimerRef.current = null;
+    }
+  }, []);
+
+  const showToolbar = useCallback(() => {
+    clearHideToolbar();
+    setHovered(true);
+  }, [clearHideToolbar]);
+
+  const scheduleHideToolbar = useCallback(() => {
+    clearHideToolbar();
+    hideToolbarTimerRef.current = window.setTimeout(() => {
+      hideToolbarTimerRef.current = null;
+      setHovered(false);
+    }, TOOLBAR_HIDE_MS);
+  }, [clearHideToolbar]);
+
+  useEffect(() => () => clearHideToolbar(), [clearHideToolbar]);
 
   if (!data) {
     console.error('[PersonNode] Rendered with no data.');
@@ -86,41 +120,58 @@ export const PersonNode = ({ data, selected }) => {
 
   return (
     <Box
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
+      onMouseEnter={showToolbar}
+      onMouseLeave={scheduleHideToolbar}
       sx={{ position: 'relative' }}
     >
-      {/* Hover action toolbar — floats above the card */}
+      {/* Captures pointer across the gap above the card (toolbar sits outside the card box). */}
+      <Box
+        aria-hidden
+        className="nodrag nopan"
+        sx={{
+          position: 'absolute',
+          top: -44,
+          left: '50%',
+          transform: 'translateX(-50%)',
+          width: 156,
+          height: 54,
+          zIndex: 9,
+          pointerEvents: 'auto',
+          borderRadius: 1,
+        }}
+      />
+      {/* Hover action toolbar — floats above the card; hide delay catches diagonal exits */}
       <Box
         sx={{
           position: 'absolute',
-          top: -36,
+          top: -42,
           left: '50%',
           transform: 'translateX(-50%)',
           display: 'flex',
-          gap: 0.75,
+          gap: 1,
+          px: 0.5,
+          py: 0.5,
           opacity: hovered ? 1 : 0,
           pointerEvents: hovered ? 'auto' : 'none',
           transition: 'opacity 0.15s',
           zIndex: 10,
-          // Prevent the toolbar from triggering ReactFlow pan
-          className: 'nodrag nopan',
+          borderRadius: 2,
         }}
         className="nodrag nopan"
       >
         <ActionButton
-          icon={<Elderly sx={{ fontSize: 14 }} />}
-          label="Add parent"
+          icon={<ArrowCircleUpOutlined sx={{ fontSize: 20 }} />}
+          title="Parent"
           onClick={(e) => handleAction(e, 'parent')}
         />
         <ActionButton
-          icon={<FamilyRestroom sx={{ fontSize: 14 }} />}
-          label="Add child"
+          icon={<ArrowCircleDownOutlined sx={{ fontSize: 20 }} />}
+          title="Child"
           onClick={(e) => handleAction(e, 'child')}
         />
         <ActionButton
-          icon={<PersonAdd sx={{ fontSize: 14 }} />}
-          label="Add spouse"
+          icon={<FavoriteBorder sx={{ fontSize: 20 }} />}
+          title="Spouse"
           onClick={(e) => handleAction(e, 'spouse')}
         />
       </Box>

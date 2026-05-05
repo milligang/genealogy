@@ -17,7 +17,6 @@ import { UnionNode } from '../nodes/UnionNode';
 import { PersonForm } from '../editing/PersonForm';
 import { EditPanel } from '../editing/EditPanel';
 import { Sidebar } from '../layout/Sidebar';
-import { SpouseEdge } from '../edges/SpouseEdge';
 import { ComingSoonDialog } from '../dialogs/ComingSoonDialog';
 import { FeedbackDialog } from '../dialogs/FeedbackDialog';
 
@@ -27,7 +26,8 @@ import {
   createSeedFamilyModel,
   clearFamilyData,
 } from '../../data/familyData';
-import { getLayoutedElements } from '../../utils/layoutUtils';
+import { getLayoutedElements, snapMarriageRowsHorizontal } from '../../utils/layoutUtils';
+import { layoutUnionNodesFromSpouses } from '../../utils/unionNodeLayout';
 import getThemeConfig from '../../theme';
 import { initPlusUtil, handleAddPerson } from '../../utils/handleAddPerson';
 import { createPersonFromFormData } from '../../utils/appHelpers';
@@ -37,7 +37,9 @@ import { buildReactFlowGraph } from '../../domain/buildReactFlowGraph';
 import {
   addPerson,
   applyConnectionsForNewPerson,
+  connectSpouses,
   deletePerson,
+  linkChildToParent,
 } from '../../domain/familyMutations';
 import { serializeFamilyModel } from '../../utils/serializeFamilyModel';
 import { writeSessionDraft, readSessionDraft, clearSessionDraft } from '../../utils/sessionFamilyDraft';
@@ -50,7 +52,6 @@ import {
 import { GUEST_DRAFT_USER_ID } from '../../constants/guest';
 
 const nodeTypes = { personNode: PersonNode, unionNode: UnionNode };
-const edgeTypes = { spouse: SpouseEdge };
 
 const DRAFT_DEBOUNCE_MS = 500;
 
@@ -109,6 +110,8 @@ export const FamilyTree = ({ currentTheme, onThemeToggle, isGuest = false }) => 
   const [feedbackOpen, setFeedbackOpen] = useState(false);
 
   const handleAddPersonRef = useRef(null);
+  /** After ConnectionsTab chooses "Create new person…", apply this link once PersonForm saves. */
+  const pendingPostConnectRef = useRef(null);
   const lastCloudSerializedRef = useRef(INITIAL_SEED_SNAPSHOT);
   const pendingPositionsRef = useRef(null);
   const draftPositionsAppliedRef = useRef(false);
@@ -116,6 +119,7 @@ export const FamilyTree = ({ currentTheme, onThemeToggle, isGuest = false }) => 
   /** After load transition (isLoading true→false), run one `fitView` once nodes exist. */
   const pendingInitialFitRef = useRef(false);
   const wasLoadingRef = useRef(true);
+  const unionFollowDragRafRef = useRef(null);
 
   const selectedNode = useMemo(
     () => nodes.find((n) => n.id === selectedId && n.type === 'personNode') ?? null,
@@ -264,7 +268,7 @@ export const FamilyTree = ({ currentTheme, onThemeToggle, isGuest = false }) => 
         pendingPositionsRef.current = null;
       }
       let i = 0;
-      return raw.map((n) => {
+      const placed = raw.map((n) => {
         const pos =
           posById.get(n.id) ??
           (() => {
@@ -273,8 +277,57 @@ export const FamilyTree = ({ currentTheme, onThemeToggle, isGuest = false }) => 
           })();
         return attachNodeCallbacks({ ...n, position: pos });
       });
+      const snapped = snapMarriageRowsHorizontal(placed, nextEdges);
+      return layoutUnionNodesFromSpouses(familyModel, snapped);
     });
   }, [familyModel, themeConfig, attachNodeCallbacks, setNodes, setEdges]);
+
+  const applyUnionFollowPositions = useCallback(
+    (currentNodes) => {
+      if (!currentNodes?.length) return;
+      setNodes((prev) => {
+        const posFromDrag = new Map(currentNodes.map((n) => [n.id, n.position]));
+        let merged = prev.map((n) =>
+          posFromDrag.has(n.id) ? { ...n, position: posFromDrag.get(n.id) } : n,
+        );
+        merged = snapMarriageRowsHorizontal(merged, edges);
+        return layoutUnionNodesFromSpouses(familyModel, merged);
+      });
+    },
+    [familyModel, setNodes, edges],
+  );
+
+  const onUnionFollowDrag = useCallback(
+    (_event, node, currentNodes) => {
+      if (node.type === 'unionNode' || !currentNodes?.length) return;
+      if (unionFollowDragRafRef.current != null) return;
+      unionFollowDragRafRef.current = window.requestAnimationFrame(() => {
+        unionFollowDragRafRef.current = null;
+        applyUnionFollowPositions(currentNodes);
+      });
+    },
+    [applyUnionFollowPositions],
+  );
+
+  const onUnionFollowDragStop = useCallback(
+    (_event, _node, currentNodes) => {
+      if (unionFollowDragRafRef.current != null) {
+        window.cancelAnimationFrame(unionFollowDragRafRef.current);
+        unionFollowDragRafRef.current = null;
+      }
+      applyUnionFollowPositions(currentNodes);
+    },
+    [applyUnionFollowPositions],
+  );
+
+  useEffect(
+    () => () => {
+      if (unionFollowDragRafRef.current != null) {
+        window.cancelAnimationFrame(unionFollowDragRafRef.current);
+      }
+    },
+    [],
+  );
 
   useEffect(() => {
     syncGraphFromModel();
@@ -452,7 +505,7 @@ export const FamilyTree = ({ currentTheme, onThemeToggle, isGuest = false }) => 
   }, [isGuest, online, dirty, familyModel, user?.id, saveCooldownUntil]);
 
   const handleAddPersonLocal = useCallback(
-    ({ formData, connections = [] }) => {
+    ({ formData, connections = [], postConnect }) => {
       if (isAtOrOverPersonLimit(familyModel)) {
         window.alert(
           `This tree can have at most ${MAX_PEOPLE_IN_TREE} people (client limit; adjustable later with the backend).`,
@@ -478,6 +531,15 @@ export const FamilyTree = ({ currentTheme, onThemeToggle, isGuest = false }) => 
             next = applyConnectionsForNewPerson(next, person.id, [conn]);
           }
         }
+
+        if (postConnect?.anchorPersonId && postConnect?.type && next.people[postConnect.anchorPersonId]) {
+          const anchor = postConnect.anchorPersonId;
+          const t = postConnect.type;
+          if (t === 'spouse') next = connectSpouses(next, person.id, anchor);
+          else if (t === 'child') next = linkChildToParent(next, person.id, anchor);
+          else if (t === 'parent') next = linkChildToParent(next, anchor, person.id);
+        }
+
         return next;
       });
       setAddPersonState({ open: false, data: null, connections: [], onAddPerson: null });
@@ -632,8 +694,9 @@ export const FamilyTree = ({ currentTheme, onThemeToggle, isGuest = false }) => 
           edges={edges}
           onNodesChange={onNodesChange}
           onEdgesChange={onEdgesChange}
+          onNodeDrag={onUnionFollowDrag}
+          onNodeDragStop={onUnionFollowDragStop}
           nodeTypes={nodeTypes}
-          edgeTypes={edgeTypes}
           nodesDraggable
           nodesConnectable={false}
           deleteKeyCode={null}
@@ -661,6 +724,17 @@ export const FamilyTree = ({ currentTheme, onThemeToggle, isGuest = false }) => 
           onDelete={handleDeletePerson}
           familyModel={familyModel}
           onUpdateModel={updateModel}
+          onOpenAddConnectedPerson={({ anchorPersonId, connectionType }) => {
+            pendingPostConnectRef.current = { anchorPersonId, type: connectionType };
+            openModal(() =>
+              setAddPersonState({
+                open: true,
+                data: null,
+                connections: [],
+                onAddPerson: null,
+              }),
+            );
+          }}
         />
       )}
 
@@ -671,11 +745,14 @@ export const FamilyTree = ({ currentTheme, onThemeToggle, isGuest = false }) => 
         availablePeople={availablePeople}
         addBlocked={atPersonLimit}
         addBlockedMessage={`Maximum ${MAX_PEOPLE_IN_TREE} people reached.`}
-        onClose={() =>
-          setAddPersonState({ open: false, data: null, connections: [], onAddPerson: null })
-        }
+        onClose={() => {
+          pendingPostConnectRef.current = null;
+          setAddPersonState({ open: false, data: null, connections: [], onAddPerson: null });
+        }}
         onSave={({ formData, connections }) => {
-          handleAddPersonLocal({ formData, connections });
+          const postConnect = pendingPostConnectRef.current;
+          pendingPostConnectRef.current = null;
+          handleAddPersonLocal({ formData, connections, postConnect });
         }}
       />
 
