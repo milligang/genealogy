@@ -18,7 +18,6 @@ CREATE TABLE IF NOT EXISTS unions (
 CREATE TABLE IF NOT EXISTS union_spouses (
   union_id text NOT NULL REFERENCES unions (id) ON DELETE CASCADE,
   person_id text NOT NULL REFERENCES people (id) ON DELETE CASCADE,
-  spouse_order int NOT NULL DEFAULT 0,
   PRIMARY KEY (union_id, person_id)
 );
 
@@ -52,6 +51,7 @@ CREATE POLICY "union_spouses_select" ON union_spouses FOR SELECT USING (
 );
 CREATE POLICY "union_spouses_insert" ON union_spouses FOR INSERT WITH CHECK (
   EXISTS (SELECT 1 FROM unions u WHERE u.id = union_spouses.union_id AND u.user_id = auth.uid())
+  AND EXISTS (SELECT 1 FROM people p WHERE p.id = union_spouses.person_id AND p.user_id = auth.uid())
 );
 CREATE POLICY "union_spouses_delete" ON union_spouses FOR DELETE USING (
   EXISTS (SELECT 1 FROM unions u WHERE u.id = union_spouses.union_id AND u.user_id = auth.uid())
@@ -62,6 +62,11 @@ CREATE POLICY "union_children_select" ON union_children FOR SELECT USING (
 );
 CREATE POLICY "union_children_insert" ON union_children FOR INSERT WITH CHECK (
   EXISTS (SELECT 1 FROM unions u WHERE u.id = union_children.union_id AND u.user_id = auth.uid())
+  AND EXISTS (
+    SELECT 1
+    FROM people p
+    WHERE p.id = union_children.child_person_id AND p.user_id = auth.uid()
+  )
 );
 CREATE POLICY "union_children_delete" ON union_children FOR DELETE USING (
   EXISTS (SELECT 1 FROM unions u WHERE u.id = union_children.union_id AND u.user_id = auth.uid())

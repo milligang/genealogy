@@ -8,8 +8,10 @@ import {
   Tooltip,
   Divider,
   Switch,
-  Menu,
-  MenuItem,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
 } from '@mui/material';
 import {
   AccountTree,
@@ -27,6 +29,7 @@ import {
   AutoFixHigh,
   CloudUpload,
   Login,
+  Close,
 } from '@mui/icons-material';
 import { THEMES } from '../../theme';
 import { useTreeIO } from '../../hooks/useTreeIO';
@@ -88,7 +91,7 @@ export const Sidebar = ({
 }) => {
   const { user, signOut } = useAuth();
   const [expanded, setExpanded] = useState(false);
-  const [accountAnchor, setAccountAnchor] = useState(null);
+  const [profileOpen, setProfileOpen] = useState(false);
   const [feedbackOpen, setFeedbackOpen] = useState(false);
   const [comingSoonOpen, setComingSoonOpen] = useState(false);
   const fileInputRef = useRef(null);
@@ -112,7 +115,8 @@ export const Sidebar = ({
         elevation={3}
         sx={{
           width: expanded ? EXPANDED_WIDTH : COLLAPSED_WIDTH,
-          height: '100vh',
+          minHeight: 0,
+          alignSelf: 'stretch',
           display: 'flex',
           flexDirection: 'column',
           borderRadius: 0,
@@ -296,7 +300,7 @@ export const Sidebar = ({
             <SidebarButton
               expanded={expanded}
               icon={<Login fontSize="small" />}
-              label="Sign in"
+              label="Log in"
               onClick={() => onNavigateToLogin?.()}
             />
           ) : (
@@ -304,23 +308,53 @@ export const Sidebar = ({
               expanded={expanded}
               icon={<AccountCircle fontSize="small" />}
               label="Account"
-              onClick={(e) => setAccountAnchor(e.currentTarget)}
+              onClick={() => setProfileOpen(true)}
             />
           )}
         </Box>
       </Paper>
 
       {!isGuest && (
-        <Menu
-          anchorEl={accountAnchor}
-          open={Boolean(accountAnchor)}
-          onClose={() => setAccountAnchor(null)}
+        <Dialog
+          open={profileOpen}
+          onClose={() => setProfileOpen(false)}
+          fullWidth
+          maxWidth="xs"
+          aria-labelledby="profile-dialog-title"
         >
-          <MenuItem disabled>{user?.email}</MenuItem>
-          <MenuItem onClick={async () => { await signOut(); setAccountAnchor(null); }}>
-            Logout
-          </MenuItem>
-        </Menu>
+          <DialogTitle
+            id="profile-dialog-title"
+            sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', pr: 1 }}
+          >
+            <Typography component="span" variant="h6" fontWeight={600}>
+              Profile
+            </Typography>
+            <IconButton aria-label="Close" onClick={() => setProfileOpen(false)} size="small">
+              <Close fontSize="small" />
+            </IconButton>
+          </DialogTitle>
+          <DialogContent dividers>
+            <Typography variant="caption" color="text.secondary" display="block" gutterBottom>
+              Signed in as
+            </Typography>
+            <Typography variant="body1" sx={{ wordBreak: 'break-word' }}>
+              {user?.email ?? '—'}
+            </Typography>
+          </DialogContent>
+          <DialogActions sx={{ px: 3, py: 2, flexDirection: 'column', alignItems: 'stretch', gap: 1 }}>
+            <Button
+              variant="contained"
+              color="error"
+              fullWidth
+              onClick={async () => {
+                await signOut();
+                setProfileOpen(false);
+              }}
+            >
+              Log out
+            </Button>
+          </DialogActions>
+        </Dialog>
       )}
 
       {/* Dialogs */}

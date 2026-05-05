@@ -39,23 +39,25 @@ npm install
 
 1. Create a [Supabase account](https://supabase.com)
 2. Create a new project
-3. Run the SQL in `supabase/migrations/001_relational_family.sql` in the SQL Editor (people, unions, union junction tables, optional legacy `family_trees` for one-time migration).
+3. Run `supabase/migrations/001_relational_family.sql` in SQL Editor.
 
-If you already created the old `family_trees` table from a prior README, you can keep it; the app migrates that JSON into the relational tables on first load when the new tables are empty.
+Notes:
+
+- The app uses Row Level Security (RLS) so authenticated users can only access rows tied to their own `user_id`.
+- Junction table inserts are also constrained to the current user’s own people/unions.
+- Keep only the anon key in the frontend; never expose the service role key.
 
 ### 4. Configure environment variables
 
 1. Copy `.env.example` to `.env`:
-   ```bash
+  ```bash
    cp .env.example .env
-   ```
-
+  ```
 2. Fill in your Supabase credentials:
-   ```
+  ```
    VITE_SUPABASE_URL=your_supabase_project_url
    VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
-   ```
-
+  ```
    Find these in: Supabase Dashboard → Project Settings → API
 
 ### 5. Run the development server

@@ -17,7 +17,7 @@ describe('parseFamilyImport', () => {
     const model = parseFamilyImport({
       people: { a: { id: 'a' }, b: { id: 'b' } },
       unions: { u: { id: 'u' } },
-      unionSpouses: [{ unionId: 'u', personId: 'a', spouseOrder: 0 }],
+      unionSpouses: [{ unionId: 'u', personId: 'a' }],
       unionChildren: [{ unionId: 'u', childPersonId: 'b' }],
     });
     expect(model.unionSpouses).toHaveLength(1);

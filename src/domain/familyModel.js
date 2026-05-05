@@ -4,7 +4,7 @@
  * @typedef {{
  *   people: Record<string, Record<string, unknown>>,
  *   unions: Record<string, UnionRecord>,
- *   unionSpouses: Array<{ unionId: string, personId: string, spouseOrder: number }>,
+ *   unionSpouses: Array<{ unionId: string, personId: string }>,
  *   unionChildren: Array<{ unionId: string, childPersonId: string }>,
  * }} FamilyModel
  */
@@ -13,7 +13,7 @@
  * Canonical family graph (client + Supabase).
  * - people: id -> display + metadata (camelCase, matches PersonNode form data + id)
  * - unions: id -> UnionRecord
- * - unionSpouses: spouse membership (spouseOrder: 0 = first, 1 = second)
+ * - unionSpouses: spouse membership rows (display order derived in selectors/layout)
  * - unionChildren: child belongs to one union (one birth family per child in MVP)
  */
 export function createEmptyFamilyModel() {

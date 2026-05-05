@@ -6,7 +6,7 @@ import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
 
 import { AuthProvider } from './context/AuthContext';
-import { ProtectedRoute } from './components/auth/ProtectedRoute';
+import { HomeRoute } from './components/auth/HomeRoute';
 import { AuthSessionNotice } from './components/auth/AuthSessionNotice';
 import { ErrorBoundary } from './components/dialogs/ErrorBoundary';
 import getThemeConfig, { THEMES } from './theme';
@@ -65,16 +65,16 @@ function App() {
                       />
                     }
                   />
-                  <Route 
-                    path="/" 
+                  <Route
+                    path="/"
                     element={
-                      <ProtectedRoute>
-                        <FamilyTree 
+                      <HomeRoute>
+                        <FamilyTree
                           currentTheme={currentTheme}
                           onThemeToggle={toggleTheme}
                         />
-                      </ProtectedRoute>
-                    } 
+                      </HomeRoute>
+                    }
                   />
                   <Route path="*" element={<Navigate to="/" replace />} />
                 </Routes>

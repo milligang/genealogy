@@ -4,6 +4,7 @@ import {
   recoverAuthSession,
   humanAuthErrorMessage,
 } from '../utils/authSessionRecovery';
+import { deriveAuthUserFromChange } from '../utils/deriveAuthUserFromChange';
 
 const AuthContext = createContext({});
 
@@ -45,8 +46,15 @@ export const AuthProvider = ({ children }) => {
 
         setLoading(false);
 
-        const { data } = supabase.auth.onAuthStateChange((_event, session) => {
-          if (mounted) setUser(session?.user ?? null);
+        const { data } = supabase.auth.onAuthStateChange((event, session) => {
+          if (!mounted) return;
+          const next = deriveAuthUserFromChange(event, session);
+          if (next.kind === 'skip') return;
+          if (next.kind === 'clear') {
+            setUser(null);
+            return;
+          }
+          setUser(next.user);
         });
         subscription = data.subscription;
         if (!mounted) subscription.unsubscribe();

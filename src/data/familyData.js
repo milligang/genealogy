@@ -90,7 +90,6 @@ async function replaceUserFamilyRemote(userId, model) {
   const spouseRows = model.unionSpouses.map((s) => ({
     union_id: s.unionId,
     person_id: s.personId,
-    spouse_order: s.spouseOrder,
   }));
   const childRows = model.unionChildren.map((c) => ({
     union_id: c.unionId,
@@ -120,7 +119,7 @@ async function loadRelationalFamily(userId) {
     await Promise.all([
       supabase.from('people').select('id, profile').eq('user_id', userId),
       supabase.from('unions').select('id, label').eq('user_id', userId),
-      supabase.from('union_spouses').select('union_id, person_id, spouse_order'),
+      supabase.from('union_spouses').select('union_id, person_id'),
       supabase.from('union_children').select('union_id, child_person_id'),
     ]);
 
@@ -148,7 +147,6 @@ async function loadRelationalFamily(userId) {
       model.unionSpouses.push({
         unionId: row.union_id,
         personId: row.person_id,
-        spouseOrder: row.spouse_order ?? 0,
       });
     }
   }

@@ -40,7 +40,7 @@ export function unionForChild(model, childId) {
 export function spousesOfUnion(model, unionId) {
   return model.unionSpouses
     .filter((s) => s.unionId === unionId)
-    .sort((a, b) => a.spouseOrder - b.spouseOrder)
+    .sort((a, b) => a.personId.localeCompare(b.personId))
     .map((s) => s.personId);
 }
 
@@ -100,10 +100,7 @@ export function connectSpouses(model, personAId, personBId) {
   const m = cloneFamilyModel(model);
   const unionId = newId();
   m.unions[unionId] = { id: unionId };
-  m.unionSpouses.push(
-    { unionId, personId: personAId, spouseOrder: 0 },
-    { unionId, personId: personBId, spouseOrder: 1 },
-  );
+  m.unionSpouses.push({ unionId, personId: personAId }, { unionId, personId: personBId });
   return m;
 }
 
@@ -121,7 +118,7 @@ export function linkChildToParent(model, childId, parentId) {
   if (!birthUnion) {
     birthUnion = newId();
     m.unions[birthUnion] = { id: birthUnion };
-    m.unionSpouses.push({ unionId: birthUnion, personId: parentId, spouseOrder: 0 });
+    m.unionSpouses.push({ unionId: birthUnion, personId: parentId });
     m.unionChildren.push({ unionId: birthUnion, childPersonId: childId });
     return m;
   }
@@ -132,8 +129,7 @@ export function linkChildToParent(model, childId, parentId) {
     console.warn('linkChildToParent: child already has two parents in their birth union');
     return model;
   }
-  const maxOrder = spouses.reduce((acc, s) => Math.max(acc, s.spouseOrder), -1);
-  m.unionSpouses.push({ unionId: birthUnion, personId: parentId, spouseOrder: maxOrder + 1 });
+  m.unionSpouses.push({ unionId: birthUnion, personId: parentId });
   return m;
 }
 

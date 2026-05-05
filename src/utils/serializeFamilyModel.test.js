@@ -7,8 +7,8 @@ describe('serializeFamilyModel', () => {
       people: { a: { id: 'a', goesBy: 'A' }, b: { id: 'b', goesBy: 'B' } },
       unions: { u1: { id: 'u1' } },
       unionSpouses: [
-        { unionId: 'u1', personId: 'b', spouseOrder: 1 },
-        { unionId: 'u1', personId: 'a', spouseOrder: 0 },
+        { unionId: 'u1', personId: 'b' },
+        { unionId: 'u1', personId: 'a' },
       ],
       unionChildren: [],
     };
@@ -27,7 +27,7 @@ describe('serializeFamilyModel', () => {
         c2: { id: 'c2', goesBy: 'C2' },
       },
       unions: { u1: { id: 'u1' } },
-      unionSpouses: [{ unionId: 'u1', personId: 'p', spouseOrder: 0 }],
+      unionSpouses: [{ unionId: 'u1', personId: 'p' }],
       unionChildren: [
         { unionId: 'u1', childPersonId: 'c2' },
         { unionId: 'u1', childPersonId: 'c1' },

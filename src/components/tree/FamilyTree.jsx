@@ -8,7 +8,8 @@ import ReactFlow, {
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 import { useNavigate } from 'react-router-dom';
-import { Box, Snackbar, Alert } from '@mui/material';
+import { Box, Snackbar, Alert, CircularProgress } from '@mui/material';
+import { alpha } from '@mui/material/styles';
 
 import { PersonNode } from '../nodes/PersonNode';
 import { UnionNode } from '../nodes/UnionNode';
@@ -56,6 +57,9 @@ const edgeTypes = { spouse: SpouseEdge };
 
 const DRAFT_DEBOUNCE_MS = 500;
 
+/** Matches initial `familyModel` state so first dirty check is not true against ref ''. */
+const INITIAL_SEED_SNAPSHOT = serializeFamilyModel(createSeedFamilyModel());
+
 export const FamilyTree = ({ currentTheme, onThemeToggle, isGuest = false }) => {
   const themeConfig = getThemeConfig(currentTheme);
   const openModal = useModalBlur();
@@ -84,7 +88,7 @@ export const FamilyTree = ({ currentTheme, onThemeToggle, isGuest = false }) => 
   const [feedbackOpen, setFeedbackOpen] = useState(false);
 
   const handleAddPersonRef = useRef(null);
-  const lastCloudSerializedRef = useRef('');
+  const lastCloudSerializedRef = useRef(INITIAL_SEED_SNAPSHOT);
   const pendingPositionsRef = useRef(null);
   const draftPositionsAppliedRef = useRef(false);
   const draftDebounceRef = useRef(null);
@@ -248,7 +252,18 @@ export const FamilyTree = ({ currentTheme, onThemeToggle, isGuest = false }) => 
         lastCloudSerializedRef.current = remoteSnap;
 
         const draft = readSessionDraft(user.id);
-        if (draft && serializeFamilyModel(draft.familyModel) !== remoteSnap) {
+        const remotePeopleCount = countPeople(remoteModel);
+        const draftPeopleCount = draft?.familyModel ? countPeople(draft.familyModel) : 0;
+        const draftDiffersFromRemote =
+          draft && serializeFamilyModel(draft.familyModel) !== remoteSnap;
+        const draftLooksCorruptEmpty = draftDiffersFromRemote && draftPeopleCount === 0 && remotePeopleCount > 0;
+
+        if (draftLooksCorruptEmpty) {
+          clearSessionDraft(user.id);
+          pendingPositionsRef.current = null;
+          draftPositionsAppliedRef.current = true;
+          setFamilyModel(remoteModel);
+        } else if (draftDiffersFromRemote) {
           pendingPositionsRef.current = draft.positions || {};
           draftPositionsAppliedRef.current = false;
           setFamilyModel(draft.familyModel);
@@ -445,9 +460,13 @@ export const FamilyTree = ({ currentTheme, onThemeToggle, isGuest = false }) => 
   void cooldownClock;
   let saveDisabledReason = '';
   if (!isGuest) {
-    if (!online) saveDisabledReason = 'Offline — open this tab when online to save.';
-    else if (!dirty) saveDisabledReason = 'No unsaved changes.';
-    else {
+    if (isLoading) {
+      saveDisabledReason = 'Loading your tree…';
+    } else if (!online) {
+      saveDisabledReason = 'Offline — open this tab when online to save.';
+    } else if (!dirty) {
+      saveDisabledReason = 'No unsaved changes.';
+    } else {
       const left = saveCooldownUntil - Date.now();
       if (left > 0) saveDisabledReason = `Save available in ${Math.ceil(left / 1000)}s.`;
     }
@@ -455,10 +474,24 @@ export const FamilyTree = ({ currentTheme, onThemeToggle, isGuest = false }) => 
 
   return (
     <Box sx={{ width: '100%', height: '100vh', display: 'flex', flexDirection: 'column' }}>
+      {!isGuest && isLoading && (
+        <Box
+          sx={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: (theme) => theme.zIndex.modal + 2,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            bgcolor: (theme) => alpha(theme.palette.background.default, 0.92),
+          }}
+        >
+          <CircularProgress />
+        </Box>
+      )}
       {isGuest && (
         <Alert severity="info" sx={{ borderRadius: 0, py: 0.5 }}>
-          Guest mode: your tree stays in this browser tab only (session storage for refresh). It is not saved to the
-          server and is removed when you close the tab. Use Sign in to keep a cloud copy.
+          <strong>Log in</strong> to save work.
         </Alert>
       )}
       <Box sx={{ flex: 1, display: 'flex', minHeight: 0 }}>
@@ -483,7 +516,7 @@ export const FamilyTree = ({ currentTheme, onThemeToggle, isGuest = false }) => 
         onSaveToCloud={handleSaveToCloud}
         saveDisabled={Boolean(saveDisabledReason)}
         saveTooltip={saveDisabledReason || 'Save tree to cloud'}
-        onNavigateToLogin={isGuest ? () => navigate('/login') : undefined}
+        onNavigateToLogin={isGuest ? () => navigate('/login?from=guest') : undefined}
         addPersonDisabled={atPersonLimit}
         addPersonDisabledTitle={`This tree allows at most ${MAX_PEOPLE_IN_TREE} people (see src/config/treePolicy.js; align with backend later).`}
         familyModel={familyModel}
