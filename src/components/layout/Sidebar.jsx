@@ -40,9 +40,17 @@ import { ComingSoonDialog } from '../dialogs/ComingSoonDialog';
 const EXPANDED_WIDTH = 200;
 const COLLAPSED_WIDTH = 56;
 
-function SidebarButton({ expanded, icon, label, onClick, color, disabled }) {
-  return (
-    <Tooltip title={expanded ? '' : label} placement="right" arrow>
+/**
+ * SidebarButton — wraps the inner <Button> in a <span> when disabled so that
+ * MUI Tooltip can still listen for events (disabled elements fire no events).
+ * The outer caller must NOT add its own wrapper for the disabled-tooltip case;
+ * this component handles it internally and consistently.
+ */
+function SidebarButton({ expanded, icon, label, onClick, color, disabled, disabledTooltip }) {
+  const button = (
+    // span wrapper is always present so Tooltip always has a live event target,
+    // whether or not the button is disabled.
+    <span style={{ display: 'block', width: '100%' }}>
       <Button
         fullWidth
         onClick={onClick}
@@ -59,6 +67,8 @@ function SidebarButton({ expanded, icon, label, onClick, color, disabled }) {
           borderRadius: 1.5,
           transition: 'all 0.2s',
           '&:hover': { bgcolor: 'action.hover' },
+          // Keep full width even though it's inside a span
+          width: '100%',
         }}
       >
         {icon}
@@ -68,6 +78,22 @@ function SidebarButton({ expanded, icon, label, onClick, color, disabled }) {
           </Typography>
         )}
       </Button>
+    </span>
+  );
+
+  // Tooltip title priority:
+  //  1. disabledTooltip — shown when disabled (explains why)
+  //  2. label           — shown when collapsed (acts as a label replacement)
+  //  3. ''              — expanded + enabled: no tooltip needed
+  const tooltipTitle = disabled && disabledTooltip
+    ? disabledTooltip
+    : !expanded
+      ? label
+      : '';
+
+  return (
+    <Tooltip title={tooltipTitle} placement="right" arrow>
+      {button}
     </Tooltip>
   );
 }
@@ -163,21 +189,14 @@ export const Sidebar = ({
 
         {/* Top buttons */}
         <Box sx={{ p: 1, display: 'flex', flexDirection: 'column', gap: 0.5 }}>
-          <Tooltip
-            title={addPersonDisabled ? addPersonDisabledTitle : ''}
-            placement="right"
-            arrow
-          >
-            <Box component="span" sx={{ width: '100%', display: 'block' }}>
-              <SidebarButton
-                expanded={expanded}
-                icon={<PersonAdd fontSize="small" />}
-                label="Add Person"
-                onClick={onAddPerson}
-                disabled={addPersonDisabled}
-              />
-            </Box>
-          </Tooltip>
+          <SidebarButton
+            expanded={expanded}
+            icon={<PersonAdd fontSize="small" />}
+            label="Add Person"
+            onClick={onAddPerson}
+            disabled={addPersonDisabled}
+            disabledTooltip={addPersonDisabledTitle}
+          />
           <SidebarButton
             expanded={expanded}
             icon={<Download fontSize="small" />}
@@ -198,17 +217,14 @@ export const Sidebar = ({
             onChange={handleFileChange}
           />
           {showCloudSave && (
-            <Tooltip title={saveTooltip} placement="right" arrow>
-              <Box component="span" sx={{ width: '100%', display: 'block' }}>
-                <SidebarButton
-                  expanded={expanded}
-                  icon={<CloudUpload fontSize="small" />}
-                  label="Save to cloud"
-                  onClick={onSaveToCloud}
-                  disabled={saveDisabled}
-                />
-              </Box>
-            </Tooltip>
+            <SidebarButton
+              expanded={expanded}
+              icon={<CloudUpload fontSize="small" />}
+              label="Save to cloud"
+              onClick={onSaveToCloud}
+              disabled={saveDisabled}
+              disabledTooltip={saveTooltip}
+            />
           )}
           <SidebarButton
             expanded={expanded}
@@ -274,7 +290,6 @@ export const Sidebar = ({
             </Box>
           </Tooltip>
 
-          {/* Coming Soon */}
           <SidebarButton
             expanded={expanded}
             icon={<AutoAwesome fontSize="small" />}
@@ -282,7 +297,6 @@ export const Sidebar = ({
             onClick={() => setComingSoonOpen(true)}
           />
 
-          {/* Feedback / Feature Request */}
           <SidebarButton
             expanded={expanded}
             icon={<ChatBubbleOutline fontSize="small" />}
@@ -357,7 +371,6 @@ export const Sidebar = ({
         </Dialog>
       )}
 
-      {/* Dialogs */}
       <ComingSoonDialog open={comingSoonOpen} onClose={() => setComingSoonOpen(false)} />
       <FeedbackDialog open={feedbackOpen} onClose={() => setFeedbackOpen(false)} />
     </>

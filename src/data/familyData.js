@@ -3,6 +3,7 @@ import supabase from '../supabaseClient';
 import { createEmptyFamilyModel } from '../domain/familyModel';
 import { addPerson, linkChildToParent } from '../domain/familyMutations';
 import { migrateLegacyFamilyTree, finalizeSoloParentUnions } from '../domain/migrateLegacyFamilyTree';
+import { repairFamilyModel } from '../domain/repairFamilyModel';
 
 export { parseFamilyImport } from './parseFamilyImport.js';
 
@@ -53,7 +54,7 @@ export function createSeedFamilyModel() {
   m = linkChildToParent(m, SEED.sarah, SEED.john);
   m = linkChildToParent(m, SEED.michael, SEED.john);
   m = finalizeSoloParentUnions(m);
-  return m;
+  return repairFamilyModel(m);
 }
 
 function personToRow(userId, person) {
@@ -155,7 +156,7 @@ async function loadRelationalFamily(userId) {
       model.unionChildren.push({ unionId: row.union_id, childPersonId: row.child_person_id });
     }
   }
-  return model;
+  return repairFamilyModel(model);
 }
 
 async function tryMigrateLegacyFamilyTrees(userId) {

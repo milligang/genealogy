@@ -1,6 +1,7 @@
 import dayjs from 'dayjs';
 import { createEmptyFamilyModel } from './familyModel';
 import { addPerson, connectSpouses, linkChildToParent } from './familyMutations';
+import { repairFamilyModel } from './repairFamilyModel';
 
 function isSpouseEdge(edge) {
   return edge?.data?.type === 'spouse' || edge?.type === 'spouse';
@@ -56,7 +57,7 @@ export function migrateLegacyFamilyTree(legacy) {
     }
   }
 
-  return finalizeSoloParentUnions(m);
+  return repairFamilyModel(finalizeSoloParentUnions(m));
 }
 
 /** Combine unions that share exactly one spouse and no co-spouse, to reduce duplicate union nodes */

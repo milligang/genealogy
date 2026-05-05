@@ -31,13 +31,15 @@ export const getLayoutedElements = (nodes, edges) => {
     edgesep: 50,
   });
 
+  const nodeIds = new Set(nodes.map((n) => n.id));
+
   nodes.forEach((node) => {
     const { width, height } = getDagreSize(node);
     dagreGraph.setNode(node.id, { width, height });
   });
 
-  // Add edges to dagre
-  edges.forEach((edge) => {
+  const safeEdges = edges.filter((e) => nodeIds.has(e.source) && nodeIds.has(e.target));
+  safeEdges.forEach((edge) => {
     dagreGraph.setEdge(edge.source, edge.target);
   });
 
@@ -48,6 +50,12 @@ export const getLayoutedElements = (nodes, edges) => {
   const layoutedNodes = nodes.map((node) => {
     const nodeWithPosition = dagreGraph.node(node.id);
     const { width, height } = getDagreSize(node);
+    if (!nodeWithPosition || typeof nodeWithPosition.x !== 'number') {
+      console.warn('[getLayoutedElements] Dagre produced no position for node', node.id);
+      const fallback =
+        node.position && typeof node.position.x === 'number' ? node.position : { x: 0, y: 0 };
+      return { ...node, position: fallback };
+    }
     return {
       ...node,
       position: {
@@ -57,7 +65,7 @@ export const getLayoutedElements = (nodes, edges) => {
     };
   });
 
-  return { nodes: layoutedNodes, edges };
+  return { nodes: layoutedNodes, edges: safeEdges };
 };
 
 export const getLayoutedElementsLR = (nodes, edges) => {
@@ -71,12 +79,15 @@ export const getLayoutedElementsLR = (nodes, edges) => {
     edgesep: 50,
   });
 
+  const nodeIds = new Set(nodes.map((n) => n.id));
+
   nodes.forEach((node) => {
     const { width, height } = getDagreSize(node);
     dagreGraph.setNode(node.id, { width, height });
   });
 
-  edges.forEach((edge) => {
+  const safeEdges = edges.filter((e) => nodeIds.has(e.source) && nodeIds.has(e.target));
+  safeEdges.forEach((edge) => {
     dagreGraph.setEdge(edge.source, edge.target);
   });
 
@@ -85,6 +96,12 @@ export const getLayoutedElementsLR = (nodes, edges) => {
   const layoutedNodes = nodes.map((node) => {
     const nodeWithPosition = dagreGraph.node(node.id);
     const { width, height } = getDagreSize(node);
+    if (!nodeWithPosition || typeof nodeWithPosition.x !== 'number') {
+      console.warn('[getLayoutedElementsLR] Dagre produced no position for node', node.id);
+      const fallback =
+        node.position && typeof node.position.x === 'number' ? node.position : { x: 0, y: 0 };
+      return { ...node, position: fallback };
+    }
     return {
       ...node,
       position: {
@@ -94,5 +111,5 @@ export const getLayoutedElementsLR = (nodes, edges) => {
     };
   });
 
-  return { nodes: layoutedNodes, edges };
+  return { nodes: layoutedNodes, edges: safeEdges };
 };

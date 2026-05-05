@@ -8,7 +8,8 @@ describe('parseFamilyImport', () => {
       unions: { u: { id: 'u' } },
     });
     expect(model.people.a.goesBy).toBe('Ann');
-    expect(model.unions.u).toEqual({ id: 'u' });
+    // Orphan unions (no spouse/child rows) are dropped during repair.
+    expect(model.unions.u).toBeUndefined();
     expect(model.unionSpouses).toEqual([]);
     expect(model.unionChildren).toEqual([]);
   });
