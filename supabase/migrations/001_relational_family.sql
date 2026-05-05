@@ -71,20 +71,3 @@ CREATE POLICY "union_children_insert" ON union_children FOR INSERT WITH CHECK (
 CREATE POLICY "union_children_delete" ON union_children FOR DELETE USING (
   EXISTS (SELECT 1 FROM unions u WHERE u.id = union_children.union_id AND u.user_id = auth.uid())
 );
-
--- Optional: legacy single-json table (older app). Safe to keep for migration reads.
-CREATE TABLE IF NOT EXISTS family_trees (
-  id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
-  user_id uuid REFERENCES auth.users NOT NULL,
-  nodes jsonb NOT NULL,
-  edges jsonb NOT NULL,
-  updated_at timestamptz DEFAULT now(),
-  UNIQUE (user_id)
-);
-
-ALTER TABLE family_trees ENABLE ROW LEVEL SECURITY;
-
-CREATE POLICY "family_trees_select_own" ON family_trees FOR SELECT USING (auth.uid() = user_id);
-CREATE POLICY "family_trees_insert_own" ON family_trees FOR INSERT WITH CHECK (auth.uid() = user_id);
-CREATE POLICY "family_trees_update_own" ON family_trees FOR UPDATE USING (auth.uid() = user_id);
-CREATE POLICY "family_trees_delete_own" ON family_trees FOR DELETE USING (auth.uid() = user_id);

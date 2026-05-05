@@ -3,7 +3,6 @@ import { spousesOfUnion, childrenOfUnion } from './familyMutations';
 
 /** Build React Flow elements + Dagre edges: person → union → child. */
 export function buildReactFlowGraph(model, themeConfig) {
-  // ── Guard: missing or malformed themeConfig ──────────────────────────────
   if (!themeConfig?.edgeStyles) {
     console.error(
       '[buildReactFlowGraph] themeConfig.edgeStyles is missing.',
@@ -22,7 +21,6 @@ export function buildReactFlowGraph(model, themeConfig) {
     return { nodes: [], edges: [] };
   }
 
-  // ── Guard: missing or malformed model ────────────────────────────────────
   if (!model?.people || !model?.unions) {
     console.error('[buildReactFlowGraph] model is missing people or unions.', model);
     return { nodes: [], edges: [] };
@@ -51,28 +49,42 @@ export function buildReactFlowGraph(model, themeConfig) {
       continue;
     }
 
+    const spouseIds = spousesOfUnion(model, uid);
+
+    // Pass unionId and spouse names into the node so UnionNode can label
+    // the "Add child" action and FamilyTree can route it correctly.
+    const spouseNames = spouseIds
+      .map((id) => {
+        const p = model.people[id];
+        return p ? (p.goesBy || p.firstName || 'Unnamed') : null;
+      })
+      .filter(Boolean);
+
     nodes.push({
       id: unionNodeRfId(uid),
       type: 'unionNode',
       position: { x: 0, y: 0 },
       draggable: false,
       selectable: false,
-      data: {},
+      data: { unionId: uid, spouseNames },
     });
 
-    const spouseIds = spousesOfUnion(model, uid);
+    // Spouse edges: first spouse comes from the left, second from the right.
+    // Both target the union node's horizontal handles so the line runs cleanly
+    // into the sides of the diamond rather than through the top.
     spouseIds.forEach((personId, idx) => {
       if (!model.people[personId]) {
         console.warn(`[buildReactFlowGraph] Spouse ${personId} in union ${uid} not found in people.`);
         return;
       }
       const sourceHandle = idx === 0 ? 'spouse-right' : 'spouse-left';
+      const targetHandle = idx === 0 ? 'spouse-in' : 'spouse-in-right';
       edges.push({
         id: `e-sp-${uid}-${personId}`,
         source: personId,
         target: unionNodeRfId(uid),
         sourceHandle,
-        targetHandle: 'spouse-in',
+        targetHandle,
         deletable: false,
         ...spouse,
         data: { kind: 'spouseUnion' },
@@ -89,14 +101,18 @@ export function buildReactFlowGraph(model, themeConfig) {
         source: unionNodeRfId(uid),
         target: childId,
         sourceHandle: 'child-out',
-        // 'parent-target' matches the type="target" Handle in PersonNode
-        targetHandle: 'parent-target',
+        targetHandle: 'parent-target',  // matches type="target" handle in PersonNode
         deletable: false,
         ...parentChild,
         data: { kind: 'unionChild' },
       });
     }
   }
+
+  console.debug(
+    `[buildReactFlowGraph] Built ${nodes.length} nodes, ${edges.length} edges.`,
+    { nodes, edges },
+  );
 
   return { nodes, edges };
 }

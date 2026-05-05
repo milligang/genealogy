@@ -39,7 +39,7 @@ npm install
 
 1. Create a [Supabase account](https://supabase.com)
 2. Create a new project
-3. Run `supabase/migrations/001_relational_family.sql` in SQL Editor.
+3. Run `supabase/migrations/001_relational_family.sql` in SQL Editor. This creates **people**, **unions**, **union_spouses**, and **union_children**.
 
 Notes:
 

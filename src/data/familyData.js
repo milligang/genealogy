@@ -2,7 +2,7 @@ import dayjs from 'dayjs';
 import supabase from '../supabaseClient';
 import { createEmptyFamilyModel } from '../domain/familyModel';
 import { addPerson, linkChildToParent } from '../domain/familyMutations';
-import { migrateLegacyFamilyTree, finalizeSoloParentUnions } from '../domain/migrateLegacyFamilyTree';
+import { finalizeSoloParentUnions } from '../domain/migrateLegacyFamilyTree';
 import { repairFamilyModel } from '../domain/repairFamilyModel';
 
 export { parseFamilyImport } from './parseFamilyImport.js';
@@ -159,25 +159,6 @@ async function loadRelationalFamily(userId) {
   return repairFamilyModel(model);
 }
 
-async function tryMigrateLegacyFamilyTrees(userId) {
-  const { data, error } = await supabase.from('family_trees').select('nodes, edges').eq('user_id', userId).maybeSingle();
-  if (error && error.code !== 'PGRST116') {
-    console.error(error);
-    return null;
-  }
-  if (!data?.nodes) return null;
-
-  const model = migrateLegacyFamilyTree({ nodes: data.nodes, edges: data.edges });
-  try {
-    await replaceUserFamilyRemote(userId, model);
-    await supabase.from('family_trees').delete().eq('user_id', userId);
-  } catch (e) {
-    console.error('Failed to migrate legacy family_trees row:', e);
-    return null;
-  }
-  return model;
-}
-
 export const SAVE_ERROR_CODES = {
   MISSING_EXPECTED_USER: 'MISSING_EXPECTED_USER',
   NOT_AUTHENTICATED: 'NOT_AUTHENTICATED',
@@ -249,10 +230,7 @@ export const loadFamilyData = async () => {
   }
 
   try {
-    let model = await loadRelationalFamily(user.id);
-    if (!model || (!Object.keys(model.people).length && !Object.keys(model.unions).length)) {
-      model = await tryMigrateLegacyFamilyTrees(user.id);
-    }
+    const model = await loadRelationalFamily(user.id);
     if (!model || (!Object.keys(model.people).length && !Object.keys(model.unions).length)) {
       return createSeedFamilyModel();
     }
@@ -275,7 +253,6 @@ export const clearFamilyData = async () => {
       await supabase.from('unions').delete().eq('user_id', user.id);
     }
     await supabase.from('people').delete().eq('user_id', user.id);
-    await supabase.from('family_trees').delete().eq('user_id', user.id);
   } catch (error) {
     console.error('Error clearing data:', error);
   }

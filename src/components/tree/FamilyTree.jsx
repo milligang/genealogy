@@ -17,8 +17,6 @@ import { PersonForm } from '../editing/PersonForm';
 import { EditPanel } from '../editing/EditPanel';
 import { Sidebar } from '../layout/Sidebar';
 import { SpouseEdge } from '../edges/SpouseEdge';
-import { SpouseConnectionLine } from '../edges/SpouseConnection';
-import { ParentChildConnectionLine } from '../edges/ParentChildConnection';
 import { ComingSoonDialog } from '../dialogs/ComingSoonDialog';
 import { FeedbackDialog } from '../dialogs/FeedbackDialog';
 
@@ -38,11 +36,8 @@ import { buildReactFlowGraph } from '../../domain/buildReactFlowGraph';
 import {
   addPerson,
   applyConnectionsForNewPerson,
-  connectSpouses,
-  linkChildToParent,
   deletePerson,
 } from '../../domain/familyMutations';
-import { repairFamilyModel } from '../../domain/repairFamilyModel';
 import { serializeFamilyModel } from '../../utils/serializeFamilyModel';
 import { writeSessionDraft, readSessionDraft, clearSessionDraft } from '../../utils/sessionFamilyDraft';
 import {
@@ -72,7 +67,6 @@ export const FamilyTree = ({ currentTheme, onThemeToggle, isGuest = false }) => 
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
   const [selectedId, setSelectedId] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [isDraggingSpouse, setIsDraggingSpouse] = useState(false);
   const [online, setOnline] = useState(() => typeof navigator !== 'undefined' && navigator.onLine);
   const [dirty, setDirty] = useState(false);
   const [saveCooldownUntil, setSaveCooldownUntil] = useState(0);
@@ -93,7 +87,6 @@ export const FamilyTree = ({ currentTheme, onThemeToggle, isGuest = false }) => 
   const pendingPositionsRef = useRef(null);
   const draftPositionsAppliedRef = useRef(false);
   const draftDebounceRef = useRef(null);
-  const graphStructureWarnedRef = useRef(false);
 
   const selectedNode = useMemo(
     () => nodes.find((n) => n.id === selectedId && n.type === 'personNode') ?? null,
@@ -147,42 +140,87 @@ export const FamilyTree = ({ currentTheme, onThemeToggle, isGuest = false }) => 
 
   const attachNodeCallbacks = useCallback(
     (node) => {
-      if (node.type === 'unionNode') return node;
+      if (node.type === 'unionNode') {
+        return {
+          ...node,
+          data: {
+            ...node.data,
+            onAddChild: ({ unionId }) => {
+              openModal(() =>
+                setAddPersonState({
+                  open: true,
+                  data: null,
+                  // Pre-wire the new person as a child of this specific union.
+                  // We pass the union's first spouse as the 'parent' connection
+                  // so applyConnectionsForNewPerson creates the child under the
+                  // correct union rather than a new solo-parent union.
+                  connections: [{ nodeId: unionId, type: 'unionChild' }],
+                  onAddPerson: null,
+                  unionId,
+                }),
+              );
+            },
+          },
+        };
+      }
       return {
         ...node,
         data: {
           ...node.data,
           onClick: () => handleNodeClick(node.id),
-          addPersonCallback: (connections) => {
-            openModal(() =>
-              setAddPersonState({ open: true, data: null, connections, onAddPerson: null }),
-            );
+          onAction: ({ type, nodeId }) => {
+            if (type === 'parent' || type === 'spouse') {
+              // Straightforward — open form pre-connected to this person
+              openModal(() =>
+                setAddPersonState({
+                  open: true,
+                  data: null,
+                  connections: [{ nodeId, type }],
+                  onAddPerson: null,
+                }),
+              );
+              return;
+            }
+            if (type === 'child') {
+              // Find all unions this person is a spouse of
+              const personUnions = familyModel.unionSpouses
+                .filter((s) => s.personId === nodeId)
+                .map((s) => s.unionId);
+
+              if (personUnions.length <= 1) {
+                // Zero or one union — no ambiguity, open form directly
+                openModal(() =>
+                  setAddPersonState({
+                    open: true,
+                    data: null,
+                    connections: [{ nodeId, type: 'child' }],
+                    onAddPerson: null,
+                  }),
+                );
+              } else {
+                // Multiple unions — need to ask which family
+                openModal(() =>
+                  setAddPersonState({
+                    open: true,
+                    data: null,
+                    connections: [{ nodeId, type: 'child' }],
+                    onAddPerson: null,
+                    disambiguateUnions: personUnions,
+                    disambiguatePersonId: nodeId,
+                  }),
+                );
+              }
+            }
           },
         },
       };
     },
-    [handleNodeClick, openModal],
+    [handleNodeClick, openModal, familyModel.unionSpouses],
   );
 
   /** Sync graph structure from model; keep existing node positions (manual layout). */
   const syncGraphFromModel = useCallback(() => {
-    let raw, nextEdges;
-    try {
-      ({ nodes: raw, edges: nextEdges } = buildReactFlowGraph(familyModel, themeConfig));
-    } catch (err) {
-      console.error('[FamilyTree] buildReactFlowGraph threw — graph will not render.', err);
-      setToast({ severity: 'error', message: 'Failed to build graph. Check the console for details.' });
-      return;
-    }
-    if (!raw?.length && countPeople(familyModel) > 0 && !graphStructureWarnedRef.current) {
-      graphStructureWarnedRef.current = true;
-      console.warn('[FamilyTree] buildReactFlowGraph returned no nodes despite having people.', familyModel);
-      setToast({
-        severity: 'warning',
-        message:
-          'Some tree data could not be drawn (invalid structure). Try importing a backup or reset to the sample tree.',
-      });
-    }
+    const { nodes: raw, edges: nextEdges } = buildReactFlowGraph(familyModel, themeConfig);
     setEdges(nextEdges);
     setNodes((prev) => {
       const posById = new Map(prev.map((n) => [n.id, n.position]));
@@ -246,23 +284,10 @@ export const FamilyTree = ({ currentTheme, onThemeToggle, isGuest = false }) => 
       const seed = createSeedFamilyModel();
       lastCloudSerializedRef.current = serializeFamilyModel(seed);
       if (draft?.familyModel) {
-        const repaired = repairFamilyModel(draft.familyModel);
-        if (countPeople(repaired) === 0) {
-          clearSessionDraft(GUEST_DRAFT_USER_ID);
-          lastCloudSerializedRef.current = serializeFamilyModel(seed);
-          draftPositionsAppliedRef.current = true;
-          pendingPositionsRef.current = null;
-          setFamilyModel(seed);
-          setToast({
-            severity: 'warning',
-            message: 'Saved guest data was unreadable; restored the sample tree (three people).',
-          });
-        } else {
-          lastCloudSerializedRef.current = serializeFamilyModel(repaired);
-          pendingPositionsRef.current = draft.positions || {};
-          draftPositionsAppliedRef.current = false;
-          setFamilyModel(repaired);
-        }
+        lastCloudSerializedRef.current = serializeFamilyModel(draft.familyModel);
+        pendingPositionsRef.current = draft.positions || {};
+        draftPositionsAppliedRef.current = false;
+        setFamilyModel(draft.familyModel);
       } else {
         draftPositionsAppliedRef.current = true;
         pendingPositionsRef.current = null;
@@ -295,21 +320,9 @@ export const FamilyTree = ({ currentTheme, onThemeToggle, isGuest = false }) => 
           draftPositionsAppliedRef.current = true;
           setFamilyModel(remoteModel);
         } else if (draftDiffersFromRemote) {
-          const repairedDraft = repairFamilyModel(draft.familyModel);
-          if (countPeople(repairedDraft) === 0) {
-            clearSessionDraft(user.id);
-            pendingPositionsRef.current = null;
-            draftPositionsAppliedRef.current = true;
-            setFamilyModel(remoteModel);
-            setToast({
-              severity: 'warning',
-              message: 'Your session draft was unreadable; loaded your cloud tree instead.',
-            });
-          } else {
-            pendingPositionsRef.current = draft.positions || {};
-            draftPositionsAppliedRef.current = false;
-            setFamilyModel(repairedDraft);
-          }
+          pendingPositionsRef.current = draft.positions || {};
+          draftPositionsAppliedRef.current = false;
+          setFamilyModel(draft.familyModel);
         } else {
           pendingPositionsRef.current = null;
           draftPositionsAppliedRef.current = true;
@@ -400,7 +413,22 @@ export const FamilyTree = ({ currentTheme, onThemeToggle, isGuest = false }) => 
       const person = createPersonFromFormData(formData);
       setFamilyModel((m) => {
         let next = addPerson(m, person);
-        next = applyConnectionsForNewPerson(next, person.id, connections);
+
+        for (const conn of connections) {
+          if (conn.type === 'unionChild') {
+            // Add as child of a specific union directly — avoids creating a
+            // duplicate solo-parent union when the family already exists.
+            next = {
+              ...next,
+              unionChildren: [
+                ...next.unionChildren,
+                { unionId: conn.nodeId, childPersonId: person.id },
+              ],
+            };
+          } else {
+            next = applyConnectionsForNewPerson(next, person.id, [conn]);
+          }
+        }
         return next;
       });
       setAddPersonState({ open: false, data: null, connections: [], onAddPerson: null });
@@ -415,42 +443,9 @@ export const FamilyTree = ({ currentTheme, onThemeToggle, isGuest = false }) => 
     setSelectedId(null);
   }, []);
 
-  const onConnectStart = useCallback((_, { handleId }) => {
-    setIsDraggingSpouse(handleId?.startsWith('spouse') ?? false);
-  }, []);
-
-  const onConnectEnd = useCallback(() => {
-    setIsDraggingSpouse(false);
-  }, []);
-
-  const isValidConnection = useCallback((connection) => {
-    if (connection.source === connection.target) return false;
-    const tid = String(connection.target || '');
-    return !tid.startsWith('union:');
-  }, []);
-
-  const onConnect = useCallback(
-    (params) => {
-      const isSpouse = params.sourceHandle?.startsWith('spouse');
-      const isParent = params.sourceHandle === 'parent-source';
-
-      if (isSpouse) {
-        const a = params.source;
-        const b = params.target;
-        setFamilyModel((m) => connectSpouses(m, a, b));
-      } else if (isParent) {
-        const parentId = params.target;
-        const childId = params.source;
-        setFamilyModel((m) => linkChildToParent(m, childId, parentId));
-      } else {
-        const parentId = params.source;
-        const childId = params.target;
-        setFamilyModel((m) => linkChildToParent(m, childId, parentId));
-      }
-      setIsDraggingSpouse(false);
-    },
-    [],
-  );
+  // Drag-to-connect is disabled — all connections are made via the
+  // hover action buttons on PersonNode and UnionNode. This avoids
+  // ambiguous untyped edges and removes the visible handle circles.
 
   const handleReset = async () => {
     if (!window.confirm('Are you sure you want to reset all data? This cannot be undone.')) return;
@@ -479,39 +474,23 @@ export const FamilyTree = ({ currentTheme, onThemeToggle, isGuest = false }) => 
   };
 
   const handleAutoLayout = useCallback(() => {
-    try {
-      const { nodes: raw, edges: nextEdges } = buildReactFlowGraph(familyModel, themeConfig);
-      const { nodes: layouted, edges: layoutedEdges } = getLayoutedElements(raw, nextEdges);
-      setEdges(layoutedEdges);
-      setNodes(layouted.map(attachNodeCallbacks));
-    } catch (err) {
-      console.error('[FamilyTree] Auto layout failed:', err);
-      setToast({
-        severity: 'error',
-        message: 'Auto layout failed. If this keeps happening, try Reset or reload the page.',
-      });
-    }
+    const { nodes: raw, edges: nextEdges } = buildReactFlowGraph(familyModel, themeConfig);
+    const { nodes: layouted, edges: layoutedEdges } = getLayoutedElements(raw, nextEdges);
+    setEdges(layoutedEdges);
+    setNodes(layouted.map(attachNodeCallbacks));
   }, [familyModel, themeConfig, attachNodeCallbacks, setNodes, setEdges]);
 
   const handleImport = useCallback(
     (model) => {
-      const repaired = repairFamilyModel(model);
-      if (countPeople(repaired) > MAX_PEOPLE_IN_TREE) {
+      if (countPeople(model) > MAX_PEOPLE_IN_TREE) {
         window.alert(
           `That file has too many people (max ${MAX_PEOPLE_IN_TREE}). Trim the tree or raise the limit in code/backend.`,
         );
         return;
       }
-      if (countPeople(repaired) === 0) {
-        setToast({
-          severity: 'warning',
-          message: 'That file had no valid people to import.',
-        });
-        return;
-      }
       draftPositionsAppliedRef.current = true;
       pendingPositionsRef.current = null;
-      setFamilyModel(repaired);
+      setFamilyModel(model);
     },
     [],
   );
@@ -592,17 +571,11 @@ export const FamilyTree = ({ currentTheme, onThemeToggle, isGuest = false }) => 
           edges={edges}
           onNodesChange={onNodesChange}
           onEdgesChange={onEdgesChange}
-          onConnect={onConnect}
-          onConnectStart={onConnectStart}
-          onConnectEnd={onConnectEnd}
-          isValidConnection={isValidConnection}
           nodeTypes={nodeTypes}
           edgeTypes={edgeTypes}
-          connectionLineComponent={
-            isDraggingSpouse ? SpouseConnectionLine : ParentChildConnectionLine
-          }
+          nodesDraggable
+          nodesConnectable={false}
           deleteKeyCode={null}
-          connectionMode="loose"
           fitView
         >
           <Controls />
